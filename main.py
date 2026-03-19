@@ -17,3 +17,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/", response_class=HTMLResponse)
 def get_index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/widget", response_class=HTMLResponse)
+def get_widget(request: Request):
+    return templates.TemplateResponse("widget.html", {"request": request})
