@@ -49,3 +49,4 @@ ENV/
 # 🤖 Bot specific (если есть)
 bot_data/
 downloads/
+catalog_index/

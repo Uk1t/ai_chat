@@ -29,7 +29,7 @@ SYSTEM_PROMPT = """
 # =========================
 # Загрузка каталога и FAISS
 # =========================
-loader = ProductCatalogLoader("test.json")
+loader = ProductCatalogLoader("products_ai.json")
 documents = loader.create_documents()
 
 embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))

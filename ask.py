@@ -27,7 +27,7 @@ SYSTEM_PROMPT = """
 
 print("📦 Загружаем каталог...")
 
-loader = ProductCatalogLoader("test.json")
+loader = ProductCatalogLoader("products_ai.json")
 documents = loader.create_documents()
 
 print(f"✅ Загружено товаров: {len(documents)}")

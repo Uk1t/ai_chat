@@ -122,7 +122,7 @@ class ProductCatalogLoader:
 
 
 if __name__ == "__main__":
-    loader = ProductCatalogLoader('../test.json')
+    loader = ProductCatalogLoader('../products_ai.json')
     docs = loader.create_documents()
     print(f"Загружено {len(docs)} товаров")
 
