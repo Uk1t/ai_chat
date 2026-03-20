@@ -24,6 +24,7 @@
             div.style.color = "white" ;
             div.style.maxWidth = '50%'
             div.style.marginLeft = who ==="Вы" ? "auto" : "0"
+            div.style.marginBottom = '5px'
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
