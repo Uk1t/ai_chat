@@ -21,8 +21,9 @@
         function addMessage(who, text) {
             const div = document.createElement("div");
             div.textContent = `${who}: ${text}`;
-            div.style.margin = "5px 0";
-            div.style.color = who === "Вы" ? "blue" : "green";
+            div.style.color = who === "Вы" ? "white" : "green";
+            div.style.maxWidth = '50%'
+            div.style.marginLeft = who ==="Вы" ? "auto" : "0"
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
