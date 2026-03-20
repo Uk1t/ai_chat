@@ -1,9 +1,9 @@
 <div id="ai-bot-widget" style="
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    bottom: 0;
+    right: 0;
     width: 400px;
-    height: 500px;
+    height: 100vh;
     border: 1px solid #ccc;
     background: #fff;
     z-index: 9999;
@@ -25,12 +25,13 @@
     </div>
     <div class="" style="padding: 10px; height: 100%;flex-direction: column;
     display: flex;">
-        <div id="chat-messages" style="flex:1; overflow-y:auto; margin-bottom:10px;max-height: 300px">
+        <div id="chat-messages" style="flex:1; overflow-y:auto; margin-bottom:10px;border-radius: 8px;
+    border: #00000026 1px solid;">
 
         </div>
 
         <div style="display:flex;">
-            <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1;">
+            <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1;border: #00000026 1px solid;padding: 5px;">
 
             <svg id="chat-send" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"
                  fill="none">
