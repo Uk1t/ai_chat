@@ -21,7 +21,7 @@
         function addMessage(who, text) {
             const div = document.createElement("div");
             div.textContent = `${who}: ${text}`;
-            div.style.color = who === "Вы" ? "white" : "green";
+            div.style.color = "white" ;
             div.style.maxWidth = '50%'
             div.style.marginLeft = who ==="Вы" ? "auto" : "0"
             chat.appendChild(div);
