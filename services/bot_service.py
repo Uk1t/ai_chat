@@ -1,115 +1,236 @@
 import os
-from typing import List, Dict
+import re
+from typing import List, Dict, Optional, Tuple
 from dotenv import load_dotenv
 
-
 from services.main_data import ProductCatalogLoader
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("Не задан OPENAI_API_KEY в окружении!")
 
-
+# =====================================================
+# 🧠 SYSTEM PROMPT
+# =====================================================
 SYSTEM_PROMPT = """
-Ты — менеджер по продажам запорной арматуры.
+Ты — профессиональный менеджер по продажам трубопроводной арматуры.
+Отвечай ТОЛЬКО на основе данных из блока "📦 КАТАЛОГ".
 
 ПРАВИЛА:
-1. Используй только каталог. Ничего не придумывай.
-2. Учитывай наличие:
-   - >0 — есть
-   - 0 — нет
-3. Если нет — предложи аналоги.
-4. Фильтруй по запросу:
-   - "кран" → только краны
-   - учитывай уточнения (DN, муфтовый и т.д.)
-5. Учитывай предыдущие сообщения клиента.
-6. Не предлагай товары с приводом.
-7. Не задавай лишних вопросов.
-8. Если видишь артикул, то используй для поиска по артикулу.
-9. Пиши коротко.
+1. Если товар один — дай четкий ответ.
+2. Если несколько — перечисли кратко и задай уточнение.
+3. Если остаток 0 — напиши "Нет в наличии" и предложи аналоги.
+4. НИЧЕГО не придумывай.
 
 ФОРМАТ:
-В наличии:
-1. Название — остаток X, цена Y
-
-Максимум 3 позиции.
-Без лишнего текста.
+✅ В наличии: Название (Арт. XXX) — ост. X, цена Y руб.
+❌ Нет в наличии: Название (Арт. XXX)
 """
 
-# =========================
-# Загрузка каталога и FAISS
-# =========================
+# =====================================================
+# 📂 КАТЕГОРИИ
+# =====================================================
+KEY_CATEGORIES = [
+    "Краны шаровые", "Дисковые затворы", "Краны с приводами в сборе",
+    "Фитинги", "Клапаны электромагнитные", "Задвижки и вентили",
+    "Обратные клапаны", "Приводы", "Фильтры", "Фланцы", "Крепеж",
+    "Трубы", "Пресс-фитинги", "Компенсаторы (Вибровставки)",
+    "Запорная арматура высокого давления", "Насосы", "Щитовые затворы",
+    "Регулирующая арматура", "Пищевая арматура", "Криогенная арматура",
+    "Комплектующие"
+]
+
+# =====================================================
+# 📦 ЗАГРУЗКА КАТАЛОГА
+# =====================================================
+print("📦 Загружаем каталог...")
 loader = ProductCatalogLoader("products_ai.json")
-documents = loader.create_documents()
+all_docs = loader.create_documents()
 
-embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+catalog_memory = []
+sku_index: Dict[str, dict] = {}
 
-if os.path.exists("catalog_index"):
-    vectorstore = FAISS.load_local("catalog_index", embeddings, allow_dangerous_deserialization=True)
-else:
-    vectorstore = FAISS.from_documents(documents, embeddings)
-    vectorstore.save_local("catalog_index")
+for d in all_docs:
+    meta = d.metadata
 
-# =========================
-# LLM
-# =========================
-llm = ChatOpenAI(model="gpt-5-mini", temperature=0.2, openai_api_key=os.getenv("OPENAI_API_KEY"))
+    item = {
+        "id": str(meta.get("id")),
+        "name": meta.get("name") or meta.get("title"),
+        "category": meta.get("category", ""),
+        "main_category": meta.get("category", "").split(">")[0].strip(),
+        "price": meta.get("price"),
+        "stock": meta.get("stock") or meta.get("quantity", 0),
+        "type": meta.get("product_type") or meta.get("type"),
+        "size": meta.get("sizes") or meta.get("size"),
+        "manufacturer": meta.get("manufacturer"),
+        "analogs_ids": meta.get("analogs_ids", []),
+    }
 
-# =========================
-# История чата по пользователям
-# =========================
-# Ключ — user_id (str), значение — список сообщений
+    catalog_memory.append(item)
+
+    # 🔥 индекс по SKU
+    sku = item["id"].lower()
+    if sku:
+        sku_index[sku] = item
+
+print(f"✅ Товаров: {len(catalog_memory)}, SKU в индексе: {len(sku_index)}")
+
+# =====================================================
+# 🔍 ПОИСК SKU
+# =====================================================
+
+def extract_sku(query: str) -> Optional[str]:
+    patterns = [
+        r'\b([A-Z]{2,}-?[A-Z0-9/]{3,})\b',
+        r'\b([A-Z]{1,}\d{3,})\b',
+        r'\b(\d{4,}[A-Z]?)\b',
+    ]
+    query = query.upper()
+
+    for pattern in patterns:
+        match = re.search(pattern, query)
+        if match:
+            return match.group(1).lower()
+
+    return None
+
+
+def search_by_sku(query: str) -> Optional[dict]:
+    sku = extract_sku(query)
+
+    if sku and sku in sku_index:
+        return sku_index[sku]
+
+    return None
+
+# =====================================================
+# 🔧 ВСПОМОГАТЕЛЬНЫЕ
+# =====================================================
+
+def filter_by_category(products: List[dict], category: str) -> List[dict]:
+    return [p for p in products if p["main_category"] == category]
+
+
+def format_product(p: dict) -> str:
+    analogs = " | 🔁 аналоги" if p.get("analogs_ids") else ""
+
+    return (
+        f"{p['name']} (Арт. {p['id']}) | "
+        f"Ост: {p['stock']} | "
+        f"Цена: {p['price']}{analogs}"
+    )
+
+
+def determine_category(question: str, llm) -> Optional[str]:
+    prompt = (
+        f"Определи категорию товара:\n"
+        f"Запрос: {question}\n\n"
+        f"Категории:\n" + "\n".join(KEY_CATEGORIES) +
+        "\n\nОтветь ТОЛЬКО названием категории или 'Нет'."
+    )
+
+    try:
+        res = llm.invoke([HumanMessage(content=prompt)])
+        answer = res.content.strip()
+        return answer if answer in KEY_CATEGORIES else None
+    except:
+        return None
+
+# =====================================================
+# 🤖 LLM
+# =====================================================
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0.2,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
+
+# =====================================================
+# 💬 ИСТОРИЯ
+# =====================================================
 chat_histories: Dict[str, List] = {}
+MAX_HISTORY = 6
 
-MAX_HISTORY = 6  # сколько последних сообщений хранить для контекста
-
-# =========================
-# Функции
-# =========================
-def search_products(question: str) -> str:
-    results = vectorstore.similarity_search(question, k=20)
-    context = []
-    for r in results:
-        p = r.metadata
-        line = (
-            f"{p.get('name')} | "
-            f"Тип: {p.get('product_type')} | "
-            f"DN: {p.get('dn')} | "
-            f"Цена: {p.get('price')} | "
-            f"Остаток: {p.get('stock')}"
-        )
-        context.append(line)
-    return "\n".join(context)
-
+# =====================================================
+# 🚀 ОСНОВНАЯ ЛОГИКА
+# =====================================================
 def ask_assistant(user_id: str, question: str) -> str:
-    """
-    user_id: уникальный идентификатор пользователя (например, telegram_id или session_id)
-    question: вопрос пользователя
-    """
-    product_context = search_products(question)
 
-    # Получаем историю пользователя или создаем новую
     history = chat_histories.get(user_id, [])
 
-    messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        SystemMessage(content=f"Найденные товары:\n{product_context}")
-    ]
+    # =================================================
+    # 1️⃣ SKU ПРИОРИТЕТ
+    # =================================================
+    product = search_by_sku(question)
 
-    # Добавляем последние сообщения пользователя в контекст
-    messages.extend(history[-MAX_HISTORY:])
-    messages.append(HumanMessage(content=question))
+    if product:
+        context = "🎯 Точное совпадение:\n" + format_product(product)
 
-    response = llm.invoke(messages)
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+        ]
+        messages.extend(history[-MAX_HISTORY:])
+        messages.append(HumanMessage(content=question))
 
-    # Обновляем историю пользователя
+        response = llm.invoke(messages)
+        answer = response.content
+
+    else:
+        # =================================================
+        # 2️⃣ КАТЕГОРИЯ → ВСЕ ТОВАРЫ
+        # =================================================
+        category = determine_category(question, llm)
+
+        if not category:
+            return "Уточните, пожалуйста, категорию товара (кран, клапан, фитинг и т.д.)"
+
+        products = filter_by_category(catalog_memory, category)
+
+        if not products:
+            return f"В категории '{category}' ничего не найдено."
+
+        # ⚠️ защита от перегруза
+        if len(products) > 150:
+            products = products[:150]
+
+        lines = [format_product(p) for p in products]
+
+        context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+        ]
+        messages.extend(history[-MAX_HISTORY:])
+        messages.append(HumanMessage(content=question))
+
+        response = llm.invoke(messages)
+        answer = response.content
+
+    # =================================================
+    # СОХРАНЕНИЕ ИСТОРИИ
+    # =================================================
     history.append(HumanMessage(content=question))
-    history.append(AIMessage(content=response.content))
-    chat_histories[user_id] = history
+    history.append(AIMessage(content=answer))
+    chat_histories[user_id] = history[-MAX_HISTORY * 2:]
 
-    return response.content
+    return answer
+
+# =====================================================
+# 🖥️ CLI
+# =====================================================
+if __name__ == "__main__":
+    print("🤖 Бот готов. Введите 'exit'")
+    user_id = "test_user"
+
+    while True:
+        q = input("\n❓ ").strip()
+
+        if q.lower() in ("exit", "quit"):
+            break
+
+        try:
+            print("\n🤖", ask_assistant(user_id, q))
+        except Exception as e:
+            print("Ошибка:", e)
