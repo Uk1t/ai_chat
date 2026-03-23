@@ -86,7 +86,7 @@ class ProductCatalogLoader:
                 f"Категория: {category_path}",
                 f"Тип: {product_type}",
                 f"DN: {dn if dn else 'не указан'}",
-                f"Артикул: {product.get('slug', 'Н/Д')}",
+                f"Артикул: {product.get('id', 'Н/Д')}",
                 f"Остаток: {stock}",
                 f"Цена: {price}",
             ]
