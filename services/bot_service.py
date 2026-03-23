@@ -140,7 +140,7 @@ def determine_category(question: str, llm) -> Optional[str]:
 # 🤖 LLM
 # =====================================================
 llm = ChatOpenAI(
-    model="gpt-4o-mini",
+    model="gpt-5-mini",
     temperature=0.2,
     openai_api_key=os.getenv("OPENAI_API_KEY")
 )
