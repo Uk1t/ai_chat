@@ -1,11 +1,12 @@
 import os
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 from services.main_data import ProductCatalogLoader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from openai import OpenAI  # Для web search
 
 load_dotenv()
 
@@ -14,22 +15,15 @@ load_dotenv()
 # =====================================================
 SYSTEM_PROMPT = """
 Ты — профессиональный менеджер по продажам трубопроводной арматуры.
-Отвечай ТОЛЬКО на основе данных из блока "📦 КАТАЛОГ".
+Отвечай ТОЛЬКО на основе данных из блока "📦 КАТАЛОГ" или достоверных источников по арматуре.
 
 ПРАВИЛА:
 1. Если товар один — дай четкий ответ.
 2. Если несколько — перечисли кратко и задай уточнение.
 3. Если остаток 0 — напиши "Нет в наличии" и предложи аналоги.
-4. НИЧЕГО не придумывай.
-
-ФОРМАТ:
-✅ В наличии: Название (Арт. XXX) — ост. X, цена Y руб.
-❌ Нет в наличии: Название (Арт. XXX)
+4. Не отвечай на вопросы вне темы запорной арматуры.
 """
 
-# =====================================================
-# 📂 КАТЕГОРИИ
-# =====================================================
 KEY_CATEGORIES = [
     "Краны шаровые", "Дисковые затворы", "Краны с приводами в сборе",
     "Фитинги", "Клапаны электромагнитные", "Задвижки и вентили",
@@ -52,7 +46,6 @@ sku_index: Dict[str, dict] = {}
 
 for d in all_docs:
     meta = d.metadata
-
     item = {
         "id": str(meta.get("id")),
         "name": meta.get("name") or meta.get("title"),
@@ -65,10 +58,7 @@ for d in all_docs:
         "manufacturer": meta.get("manufacturer"),
         "analogs_ids": meta.get("analogs_ids", []),
     }
-
     catalog_memory.append(item)
-
-    # 🔥 индекс по SKU
     sku = item["id"].lower()
     if sku:
         sku_index[sku] = item
@@ -78,7 +68,6 @@ print(f"✅ Товаров: {len(catalog_memory)}, SKU в индексе: {len(s
 # =====================================================
 # 🔍 ПОИСК SKU
 # =====================================================
-
 def extract_sku(query: str) -> Optional[str]:
     patterns = [
         r'\b([A-Z]{2,}-?[A-Z0-9/]{3,})\b',
@@ -86,49 +75,34 @@ def extract_sku(query: str) -> Optional[str]:
         r'\b(\d{4,}[A-Z]?)\b',
     ]
     query = query.upper()
-
     for pattern in patterns:
         match = re.search(pattern, query)
         if match:
             return match.group(1).lower()
-
     return None
-
 
 def search_by_sku(query: str) -> Optional[dict]:
     sku = extract_sku(query)
-
     if sku and sku in sku_index:
         return sku_index[sku]
-
     return None
 
 # =====================================================
 # 🔧 ВСПОМОГАТЕЛЬНЫЕ
 # =====================================================
-
 def filter_by_category(products: List[dict], category: str) -> List[dict]:
     return [p for p in products if p["main_category"] == category]
 
-
 def format_product(p: dict) -> str:
     analogs = " | 🔁 аналоги" if p.get("analogs_ids") else ""
-
-    return (
-        f"{p['name']} (Арт. {p['id']}) | "
-        f"Ост: {p['stock']} | "
-        f"Цена: {p['price']}{analogs}"
-    )
-
+    return f"{p['name']} (Арт. {p['id']}) | Ост: {p['stock']} | Цена: {p['price']}{analogs}"
 
 def determine_category(question: str, llm) -> Optional[str]:
     prompt = (
-        f"Определи категорию товара:\n"
-        f"Запрос: {question}\n\n"
-        f"Категории:\n" + "\n".join(KEY_CATEGORIES) +
+        f"Определи категорию товара:\nЗапрос: {question}\n\n"
+        "Категории:\n" + "\n".join(KEY_CATEGORIES) +
         "\n\nОтветь ТОЛЬКО названием категории или 'Нет'."
     )
-
     try:
         res = llm.invoke([HumanMessage(content=prompt)])
         answer = res.content.strip()
@@ -146,6 +120,32 @@ llm = ChatOpenAI(
 )
 
 # =====================================================
+# 🌐 INTERNET SEARCH (только арматура)
+# =====================================================
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def search_internet(question: str) -> str:
+    """
+    Использует OpenAI Responses API с web_search инструментом.
+    Ограничиваем поиск только по терминам и стандартам арматуры.
+    """
+    try:
+        response = client.responses.create(
+            model="gpt-5",
+            tools=[{"type": "web_search"}],
+            input=f"Найди достоверное определение по запорной арматуре: {question}"
+        )
+        result = ""
+        for item in response.output:
+            if item.type == "message":
+                for c in item.content:
+                    if c.type == "output_text":
+                        result += c.text
+        return result.strip()
+    except Exception as e:
+        return f"Не удалось получить информацию из интернета. Ошибка: {e}"
+
+# =====================================================
 # 💬 ИСТОРИЯ
 # =====================================================
 chat_histories: Dict[str, List] = {}
@@ -155,65 +155,54 @@ MAX_HISTORY = 6
 # 🚀 ОСНОВНАЯ ЛОГИКА
 # =====================================================
 def ask_assistant(user_id: str, question: str) -> str:
-
     history = chat_histories.get(user_id, [])
+    question_lower = question.lower()
+    is_definition_query = any(word in question_lower for word in ["что такое", "определение", "термин", "объясни"])
 
-    # =================================================
-    # 1️⃣ SKU ПРИОРИТЕТ
-    # =================================================
+    # 1️⃣ Поиск по SKU
     product = search_by_sku(question)
-
     if product:
         context = "🎯 Точное совпадение:\n" + format_product(product)
-
         messages = [
             SystemMessage(content=SYSTEM_PROMPT),
             SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
         ]
         messages.extend(history[-MAX_HISTORY:])
         messages.append(HumanMessage(content=question))
-
         response = llm.invoke(messages)
         answer = response.content
-
     else:
-        # =================================================
-        # 2️⃣ КАТЕГОРИЯ → ВСЕ ТОВАРЫ
-        # =================================================
+        # 2️⃣ Поиск по категории
         category = determine_category(question, llm)
+        if category:
+            products = filter_by_category(catalog_memory, category)
+            if not products:
+                answer = f"В категории '{category}' ничего не найдено."
+            else:
+                if len(products) > 150:
+                    products = products[:150]
+                lines = [format_product(p) for p in products]
+                context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+                messages = [
+                    SystemMessage(content=SYSTEM_PROMPT),
+                    SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+                ]
+                messages.extend(history[-MAX_HISTORY:])
+                messages.append(HumanMessage(content=question))
+                response = llm.invoke(messages)
+                answer = response.content
+        else:
+            # 3️⃣ Определение термина (только если явно про термин)
+            if is_definition_query:
+                web_info = search_internet(question)
+                answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
+            else:
+                # 4️⃣ Вне темы
+                answer = "Не могу ответить — вопрос вне темы запорной арматуры."
 
-        if not category:
-            return "Уточните, пожалуйста, категорию товара (кран, клапан, фитинг и т.д.)"
-
-        products = filter_by_category(catalog_memory, category)
-
-        if not products:
-            return f"В категории '{category}' ничего не найдено."
-
-        if len(products) > 150:
-            products = products[:150]
-
-        lines = [format_product(p) for p in products]
-
-        context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
-
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-        ]
-        messages.extend(history[-MAX_HISTORY:])
-        messages.append(HumanMessage(content=question))
-
-        response = llm.invoke(messages)
-        answer = response.content
-
-    # =================================================
-    # СОХРАНЕНИЕ ИСТОРИИ
-    # =================================================
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    chat_histories[user_id] = history[-MAX_HISTORY * 2:]
-
+    chat_histories[user_id] = history[-MAX_HISTORY*2:]
     return answer
 
 # =====================================================
@@ -222,13 +211,10 @@ def ask_assistant(user_id: str, question: str) -> str:
 if __name__ == "__main__":
     print("🤖 Бот готов. Введите 'exit'")
     user_id = "test_user"
-
     while True:
         q = input("\n❓ ").strip()
-
         if q.lower() in ("exit", "quit"):
             break
-
         try:
             print("\n🤖", ask_assistant(user_id, q))
         except Exception as e:
