@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from services.main_data import ProductCatalogLoader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-
 from openai import OpenAI  # Для web search
 
 load_dotenv()
@@ -16,17 +15,13 @@ load_dotenv()
 # =====================================================
 SYSTEM_PROMPT = """
 Ты — профессиональный менеджер по продажам трубопроводной арматуры.
-Отвечай ТОЛЬКО на основе данных из блока "📦 КАТАЛОГ".
+Отвечай ТОЛЬКО на основе данных из блока "📦 КАТАЛОГ" или достоверных источников по арматуре.
 
 ПРАВИЛА:
 1. Если товар один — дай четкий ответ.
 2. Если несколько — перечисли кратко и задай уточнение.
 3. Если остаток 0 — напиши "Нет в наличии" и предложи аналоги.
-4. НИЧЕГО не придумывай.
-
-ФОРМАТ:
-✅ В наличии: Название (Арт. XXX) — ост. X, цена Y руб.
-❌ Нет в наличии: Название (Арт. XXX)
+4. Не отвечай на вопросы вне темы запорной арматуры.
 """
 
 KEY_CATEGORIES = [
@@ -64,7 +59,6 @@ for d in all_docs:
         "analogs_ids": meta.get("analogs_ids", []),
     }
     catalog_memory.append(item)
-
     sku = item["id"].lower()
     if sku:
         sku_index[sku] = item
@@ -101,17 +95,12 @@ def filter_by_category(products: List[dict], category: str) -> List[dict]:
 
 def format_product(p: dict) -> str:
     analogs = " | 🔁 аналоги" if p.get("analogs_ids") else ""
-    return (
-        f"{p['name']} (Арт. {p['id']}) | "
-        f"Ост: {p['stock']} | "
-        f"Цена: {p['price']}{analogs}"
-    )
+    return f"{p['name']} (Арт. {p['id']}) | Ост: {p['stock']} | Цена: {p['price']}{analogs}"
 
 def determine_category(question: str, llm) -> Optional[str]:
     prompt = (
-        f"Определи категорию товара:\n"
-        f"Запрос: {question}\n\n"
-        f"Категории:\n" + "\n".join(KEY_CATEGORIES) +
+        f"Определи категорию товара:\nЗапрос: {question}\n\n"
+        "Категории:\n" + "\n".join(KEY_CATEGORIES) +
         "\n\nОтветь ТОЛЬКО названием категории или 'Нет'."
     )
     try:
@@ -131,21 +120,21 @@ llm = ChatOpenAI(
 )
 
 # =====================================================
-# 🌐 INTERNET SEARCH (web search через OpenAI)
+# 🌐 INTERNET SEARCH (только арматура)
 # =====================================================
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def search_internet(question: str) -> str:
     """
-    Использует OpenAI Responses API с web_search инструментом для поиска по интернету.
+    Использует OpenAI Responses API с web_search инструментом.
+    Ограничиваем поиск только по терминам и стандартам арматуры.
     """
     try:
         response = client.responses.create(
-            model="gpt-5",                 # поддерживает web_search
-            tools=[{"type": "web_search"}], # включаем web search
-            input=question,
+            model="gpt-5",
+            tools=[{"type": "web_search"}],
+            input=f"Найди достоверное определение по запорной арматуре: {question}"
         )
-        # собираем весь текст из ответа
         result = ""
         for item in response.output:
             if item.type == "message":
@@ -167,18 +156,15 @@ MAX_HISTORY = 6
 # =====================================================
 def ask_assistant(user_id: str, question: str) -> str:
     history = chat_histories.get(user_id, [])
-
-    # проверяем, похоже ли, что вопрос о термине
     question_lower = question.lower()
     is_definition_query = any(word in question_lower for word in ["что такое", "определение", "термин", "объясни"])
 
     if is_definition_query:
-        # делаем web-search сразу
+        # 1️⃣ web search для терминов
         web_info = search_internet(question)
         answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
-
     else:
-        # 1️⃣ SKU
+        # 2️⃣ SKU
         product = search_by_sku(question)
         if product:
             context = "🎯 Точное совпадение:\n" + format_product(product)
@@ -191,7 +177,7 @@ def ask_assistant(user_id: str, question: str) -> str:
             response = llm.invoke(messages)
             answer = response.content
         else:
-            # 2️⃣ КАТЕГОРИЯ
+            # 3️⃣ Категория
             category = determine_category(question, llm)
             if category:
                 products = filter_by_category(catalog_memory, category)
@@ -211,13 +197,11 @@ def ask_assistant(user_id: str, question: str) -> str:
                     response = llm.invoke(messages)
                     answer = response.content
             else:
-                # 3️⃣ fallback web search
-                web_info = search_internet(question)
-                answer = f"🌐 Информация из интернета:\n{web_info}" if web_info else "Не удалось найти информацию."
+                answer = "Не могу ответить — вопрос вне темы запорной арматуры."
 
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    chat_histories[user_id] = history[-MAX_HISTORY * 2:]
+    chat_histories[user_id] = history[-MAX_HISTORY*2:]
     return answer
 
 # =====================================================
