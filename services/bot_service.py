@@ -7,8 +7,7 @@ from services.main_data import ProductCatalogLoader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-# Новый импорт для web search
-from openai import OpenAI
+from openai import OpenAI  # Для web search / расширенного поиска
 
 load_dotenv()
 
@@ -136,18 +135,19 @@ llm = ChatOpenAI(
 )
 
 # =====================================================
-# 🌐 WEB SEARCH (только newkey.ru)
+# 🌐 WEB SEARCH (по всему интернету)
 # =====================================================
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def search_site_newkey(question: str) -> str:
+def search_internet(question: str) -> str:
     try:
-        query = f"site:newkey.ru {question}"
         response = client.responses.create(
             model="gpt-5-mini",
-            tools=[{"type": "web_search"}],
-            input=query
+            input=f"Найди информацию по запросу: {question}. Используй только достоверные источники.",
+            temperature=0.3,
+            max_output_tokens=800
         )
+        # собираем все текстовые части ответа
         result = ""
         for item in response.output:
             if item.type == "message":
@@ -156,7 +156,7 @@ def search_site_newkey(question: str) -> str:
                         result += c.text
         return result.strip()
     except Exception as e:
-        return "Не удалось получить данные с сайта."
+        return "Не удалось получить информацию из интернета."
 
 # =====================================================
 # 💬 ИСТОРИЯ
@@ -184,7 +184,6 @@ def ask_assistant(user_id: str, question: str) -> str:
         messages.append(HumanMessage(content=question))
         response = llm.invoke(messages)
         answer = response.content
-
     else:
         # =================================================
         # 2️⃣ КАТЕГОРИЯ → ВСЕ ТОВАРЫ
@@ -209,13 +208,13 @@ def ask_assistant(user_id: str, question: str) -> str:
                 answer = response.content
         else:
             # =================================================
-            # 3️⃣ WEB SEARCH (fallback по newkey.ru)
+            # 3️⃣ INTERNET SEARCH (fallback)
             # =================================================
-            site_answer = search_site_newkey(question)
-            if site_answer:
-                answer = f"📘 Информация с сайта:\n{site_answer}"
+            web_info = search_internet(question)
+            if web_info:
+                answer = f"🌐 Информация из интернета:\n{web_info}"
             else:
-                answer = "Уточните, пожалуйста, категорию товара (кран, клапан, фитинг и т.д.)"
+                answer = "Не удалось найти информацию. Уточните запрос."
 
     # =================================================
     # СОХРАНЕНИЕ ИСТОРИИ
