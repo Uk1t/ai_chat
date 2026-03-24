@@ -4,24 +4,9 @@ from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 from services.main_data import ProductCatalogLoader
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 load_dotenv()
-
-# ================= SYSTEM =================
-
-SYSTEM_PROMPT = """
-Ты — менеджер по продажам трубопроводной арматуры.
-
-Отвечай:
-- кратко
-- по делу
-- только по каталогу
-
-Если нет товара — предлагай аналоги.
-Если вопрос вне темы — откажись.
-"""
 
 # ================= LOAD CATALOG =================
 
@@ -38,7 +23,6 @@ for d in docs:
         "id": str(m.get("id")),
         "name": m.get("name") or m.get("title"),
         "category": m.get("category", ""),
-        "main_category": m.get("category", "").split(">")[0].strip(),
         "price": m.get("price"),
         "stock": m.get("stock") or m.get("quantity", 0),
         "size": str(m.get("sizes") or m.get("size") or "").lower(),
@@ -59,6 +43,30 @@ def extract_sku(text: str) -> Optional[str]:
         sku = match.group(1).lower()
         if sku in sku_index:
             return sku
+    return None
+
+
+def search_by_name(text: str) -> Optional[dict]:
+    text = text.lower()
+
+    best_match = None
+    best_score = 0
+
+    for p in catalog:
+        name = p["name"].lower()
+
+        score = 0
+        for word in text.split():
+            if len(word) > 3 and word in name:
+                score += 1
+
+        if score > best_score:
+            best_score = score
+            best_match = p
+
+    if best_score >= 2:
+        return best_match
+
     return None
 
 
@@ -105,22 +113,28 @@ def ask_assistant(user_id: str, question: str) -> str:
 
     q = question.lower()
 
-    # ========= 1. SKU =========
+    # ========= 1. NEW PRODUCT DETECTION =========
     sku = extract_sku(question)
-    if sku:
-        product = sku_index[sku]
+    product_by_name = search_by_name(question)
+
+    if sku or product_by_name:
+        product = sku_index[sku] if sku else product_by_name
 
         user_context[user_id] = {
             "type": "product",
             "data": product
         }
 
-        answer = format_product(product)
+        if is_price_question(q):
+            answer = f"Цена: {product['price']} руб."
+        elif is_stock_question(q):
+            answer = f"Остаток: {product['stock']} шт."
+        else:
+            answer = format_product(product)
 
     # ========= 2. CONTEXT =========
     elif ctx:
 
-        # ---- SINGLE PRODUCT ----
         if ctx["type"] == "product":
             p = ctx["data"]
 
@@ -134,7 +148,6 @@ def ask_assistant(user_id: str, question: str) -> str:
             else:
                 answer = format_product(p)
 
-        # ---- LIST OF PRODUCTS ----
         elif ctx["type"] == "list":
             products = ctx["data"]
 
@@ -153,7 +166,6 @@ def ask_assistant(user_id: str, question: str) -> str:
     else:
         dn = detect_dn(question)
 
-        # Примитивная категория (без LLM — быстрее и стабильнее)
         if "затвор" in q:
             products = filter_by_category(catalog, "затвор")
         elif "кран" in q:
