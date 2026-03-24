@@ -190,7 +190,6 @@ def ask_assistant(user_id: str, question: str) -> str:
         if not products:
             return f"В категории '{category}' ничего не найдено."
 
-        # ⚠️ защита от перегруза
         if len(products) > 150:
             products = products[:150]
 
