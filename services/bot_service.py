@@ -1,209 +1,231 @@
 import os
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from dotenv import load_dotenv
 
 from services.main_data import ProductCatalogLoader
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 load_dotenv()
 
-# ================= LOAD CATALOG =================
+# =====================================================
+# 🧠 SYSTEM PROMPT
+# =====================================================
+SYSTEM_PROMPT = """
+Ты — профессиональный менеджер по продажам трубопроводной арматуры.
+Отвечай ТОЛЬКО на основе данных из блока "📦 КАТАЛОГ".
 
+ПРАВИЛА:
+1. Если товар один — дай четкий ответ.
+2. Если несколько — перечисли кратко и задай уточнение.
+3. Если остаток 0 — напиши "Нет в наличии" и предложи аналоги.
+4. НИЧЕГО не придумывай.
+
+ФОРМАТ:
+✅ В наличии: Название (Арт. XXX) — ост. X, цена Y руб.
+❌ Нет в наличии: Название (Арт. XXX)
+"""
+
+# =====================================================
+# 📂 КАТЕГОРИИ
+# =====================================================
+KEY_CATEGORIES = [
+    "Краны шаровые", "Дисковые затворы", "Краны с приводами в сборе",
+    "Фитинги", "Клапаны электромагнитные", "Задвижки и вентили",
+    "Обратные клапаны", "Приводы", "Фильтры", "Фланцы", "Крепеж",
+    "Трубы", "Пресс-фитинги", "Компенсаторы (Вибровставки)",
+    "Запорная арматура высокого давления", "Насосы", "Щитовые затворы",
+    "Регулирующая арматура", "Пищевая арматура", "Криогенная арматура",
+    "Комплектующие"
+]
+
+# =====================================================
+# 📦 ЗАГРУЗКА КАТАЛОГА
+# =====================================================
 print("📦 Загружаем каталог...")
 loader = ProductCatalogLoader("products_ai.json")
-docs = loader.create_documents()
+all_docs = loader.create_documents()
 
-catalog: List[dict] = []
+catalog_memory = []
 sku_index: Dict[str, dict] = {}
 
-for d in docs:
-    m = d.metadata
+for d in all_docs:
+    meta = d.metadata
+
     item = {
-        "id": str(m.get("id")),
-        "name": m.get("name") or m.get("title"),
-        "category": m.get("category", ""),
-        "price": m.get("price"),
-        "stock": m.get("stock") or m.get("quantity", 0),
-        "size": str(m.get("sizes") or m.get("size") or "").lower(),
-        "analogs_ids": m.get("analogs_ids", []),
+        "id": str(meta.get("id")),
+        "name": meta.get("name") or meta.get("title"),
+        "category": meta.get("category", ""),
+        "main_category": meta.get("category", "").split(">")[0].strip(),
+        "price": meta.get("price"),
+        "stock": meta.get("stock") or meta.get("quantity", 0),
+        "type": meta.get("product_type") or meta.get("type"),
+        "size": meta.get("sizes") or meta.get("size"),
+        "manufacturer": meta.get("manufacturer"),
+        "analogs_ids": meta.get("analogs_ids", []),
     }
-    catalog.append(item)
 
-    if item["id"]:
-        sku_index[item["id"].lower()] = item
+    catalog_memory.append(item)
 
-print(f"✅ Загружено: {len(catalog)} товаров")
+    # 🔥 индекс по SKU
+    sku = item["id"].lower()
+    if sku:
+        sku_index[sku] = item
 
-# ================= HELPERS =================
+print(f"✅ Товаров: {len(catalog_memory)}, SKU в индексе: {len(sku_index)}")
 
-def extract_sku(text: str) -> Optional[str]:
-    match = re.search(r'\b([A-Z0-9\-*/]+)\b', text.upper())
-    if match:
-        sku = match.group(1).lower()
-        if sku in sku_index:
-            return sku
-    return None
+# =====================================================
+# 🔍 ПОИСК SKU
+# =====================================================
 
+def extract_sku(query: str) -> Optional[str]:
+    patterns = [
+        r'\b([A-Z]{2,}-?[A-Z0-9/]{3,})\b',
+        r'\b([A-Z]{1,}\d{3,})\b',
+        r'\b(\d{4,}[A-Z]?)\b',
+    ]
+    query = query.upper()
 
-def search_by_name(text: str) -> Optional[dict]:
-    text = text.lower()
-
-    best_match = None
-    best_score = 0
-
-    for p in catalog:
-        name = p["name"].lower()
-
-        score = 0
-        for word in text.split():
-            if len(word) > 3 and word in name:
-                score += 1
-
-        if score > best_score:
-            best_score = score
-            best_match = p
-
-    if best_score >= 2:
-        return best_match
+    for pattern in patterns:
+        match = re.search(pattern, query)
+        if match:
+            return match.group(1).lower()
 
     return None
 
 
-def detect_dn(text: str) -> Optional[str]:
-    match = re.search(r'\b(?:dn)?\s?(\d{2,4})\b', text.lower())
-    return match.group(1) if match else None
+def search_by_sku(query: str) -> Optional[dict]:
+    sku = extract_sku(query)
 
+    if sku and sku in sku_index:
+        return sku_index[sku]
 
-def is_price_question(q: str):
-    return any(w in q for w in ["цена", "стоимость", "сколько стоит"])
+    return None
 
+# =====================================================
+# 🔧 ВСПОМОГАТЕЛЬНЫЕ
+# =====================================================
 
-def is_stock_question(q: str):
-    return any(w in q for w in ["наличие", "остаток", "сколько есть"])
-
-
-def is_analogs_question(q: str):
-    return any(w in q for w in ["аналог", "подобрать", "варианты"])
+def filter_by_category(products: List[dict], category: str) -> List[dict]:
+    return [p for p in products if p["main_category"] == category]
 
 
 def format_product(p: dict) -> str:
-    return f"{p['name']} (Арт. {p['id']}) | Ост: {p['stock']} | Цена: {p['price']}"
+    analogs = " | 🔁 аналоги" if p.get("analogs_ids") else ""
+
+    return (
+        f"{p['name']} (Арт. {p['id']}) | "
+        f"Ост: {p['stock']} | "
+        f"Цена: {p['price']}{analogs}"
+    )
 
 
-def filter_by_category(products: List[dict], keyword: str) -> List[dict]:
-    keyword = keyword.lower()
-    return [p for p in products if keyword in p["category"].lower()]
+def determine_category(question: str, llm) -> Optional[str]:
+    prompt = (
+        f"Определи категорию товара:\n"
+        f"Запрос: {question}\n\n"
+        f"Категории:\n" + "\n".join(KEY_CATEGORIES) +
+        "\n\nОтветь ТОЛЬКО названием категории или 'Нет'."
+    )
 
+    try:
+        res = llm.invoke([HumanMessage(content=prompt)])
+        answer = res.content.strip()
+        return answer if answer in KEY_CATEGORIES else None
+    except:
+        return None
 
-def filter_by_dn(products: List[dict], dn: str) -> List[dict]:
-    return [p for p in products if dn in p["size"]]
+# =====================================================
+# 🤖 LLM
+# =====================================================
+llm = ChatOpenAI(
+    model="gpt-5-mini",
+    temperature=0.2,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
 
-
-# ================= MEMORY =================
-
+# =====================================================
+# 💬 ИСТОРИЯ
+# =====================================================
 chat_histories: Dict[str, List] = {}
-user_context: Dict[str, dict] = {}
+MAX_HISTORY = 6
 
-# ================= CORE =================
-
+# =====================================================
+# 🚀 ОСНОВНАЯ ЛОГИКА
+# =====================================================
 def ask_assistant(user_id: str, question: str) -> str:
+
     history = chat_histories.get(user_id, [])
-    ctx = user_context.get(user_id)
 
-    q = question.lower()
+    # =================================================
+    # 1️⃣ SKU ПРИОРИТЕТ
+    # =================================================
+    product = search_by_sku(question)
 
-    # ========= 1. NEW PRODUCT DETECTION =========
-    sku = extract_sku(question)
-    product_by_name = search_by_name(question)
+    if product:
+        context = "🎯 Точное совпадение:\n" + format_product(product)
 
-    if sku or product_by_name:
-        product = sku_index[sku] if sku else product_by_name
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+        ]
+        messages.extend(history[-MAX_HISTORY:])
+        messages.append(HumanMessage(content=question))
 
-        user_context[user_id] = {
-            "type": "product",
-            "data": product
-        }
+        response = llm.invoke(messages)
+        answer = response.content
 
-        if is_price_question(q):
-            answer = f"Цена: {product['price']} руб."
-        elif is_stock_question(q):
-            answer = f"Остаток: {product['stock']} шт."
-        else:
-            answer = format_product(product)
-
-    # ========= 2. CONTEXT =========
-    elif ctx:
-
-        if ctx["type"] == "product":
-            p = ctx["data"]
-
-            if is_price_question(q):
-                answer = f"Цена: {p['price']} руб."
-            elif is_stock_question(q):
-                answer = f"Остаток: {p['stock']} шт."
-            elif is_analogs_question(q):
-                analogs = [sku_index[a] for a in p["analogs_ids"] if a in sku_index]
-                answer = "\n".join(format_product(a) for a in analogs) if analogs else "Аналоги не найдены."
-            else:
-                answer = format_product(p)
-
-        elif ctx["type"] == "list":
-            products = ctx["data"]
-
-            if is_price_question(q):
-                answer = "Цены:\n" + "\n".join(
-                    f"{p['id']}: {p['price']} руб." for p in products[:20]
-                )
-            elif is_stock_question(q):
-                answer = "Остатки:\n" + "\n".join(
-                    f"{p['id']}: {p['stock']} шт." for p in products[:20]
-                )
-            else:
-                answer = "\n".join(format_product(p) for p in products[:10])
-
-    # ========= 3. SEARCH =========
     else:
-        dn = detect_dn(question)
+        # =================================================
+        # 2️⃣ КАТЕГОРИЯ → ВСЕ ТОВАРЫ
+        # =================================================
+        category = determine_category(question, llm)
 
-        if "затвор" in q:
-            products = filter_by_category(catalog, "затвор")
-        elif "кран" in q:
-            products = filter_by_category(catalog, "кран")
-        elif "клапан" in q:
-            products = filter_by_category(catalog, "клапан")
-        else:
-            return "Не могу ответить — вопрос вне темы запорной арматуры."
+        if not category:
+            return "Уточните, пожалуйста, категорию товара (кран, клапан, фитинг и т.д.)"
 
-        if dn:
-            products = filter_by_dn(products, dn)
+        products = filter_by_category(catalog_memory, category)
 
         if not products:
-            return "Ничего не найдено."
+            return f"В категории '{category}' ничего не найдено."
 
-        user_context[user_id] = {
-            "type": "list",
-            "data": products
-        }
+        if len(products) > 150:
+            products = products[:150]
 
-        answer = "\n".join(format_product(p) for p in products[:10])
+        lines = [format_product(p) for p in products]
 
-    # ========= SAVE =========
+        context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+        ]
+        messages.extend(history[-MAX_HISTORY:])
+        messages.append(HumanMessage(content=question))
+
+        response = llm.invoke(messages)
+        answer = response.content
+
+    # =================================================
+    # СОХРАНЕНИЕ ИСТОРИИ
+    # =================================================
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    chat_histories[user_id] = history[-12:]
+    chat_histories[user_id] = history[-MAX_HISTORY * 2:]
 
     return answer
 
-
-# ================= CLI =================
-
+# =====================================================
+# 🖥️ CLI
+# =====================================================
 if __name__ == "__main__":
     print("🤖 Бот готов. Введите 'exit'")
     user_id = "test_user"
 
     while True:
         q = input("\n❓ ").strip()
+
         if q.lower() in ("exit", "quit"):
             break
 
