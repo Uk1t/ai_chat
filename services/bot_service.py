@@ -7,7 +7,7 @@ from services.main_data import ProductCatalogLoader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-from openai import OpenAI  # Для web search / расширенного поиска
+from openai import OpenAI  # Для web search
 
 load_dotenv()
 
@@ -29,9 +29,6 @@ SYSTEM_PROMPT = """
 ❌ Нет в наличии: Название (Арт. XXX)
 """
 
-# =====================================================
-# 📂 КАТЕГОРИИ
-# =====================================================
 KEY_CATEGORIES = [
     "Краны шаровые", "Дисковые затворы", "Краны с приводами в сборе",
     "Фитинги", "Клапаны электромагнитные", "Задвижки и вентили",
@@ -68,7 +65,6 @@ for d in all_docs:
     }
     catalog_memory.append(item)
 
-    # 🔥 индекс по SKU
     sku = item["id"].lower()
     if sku:
         sku_index[sku] = item
@@ -135,19 +131,23 @@ llm = ChatOpenAI(
 )
 
 # =====================================================
-# 🌐 WEB SEARCH (по всему интернету)
+# 🌐 INTERNET SEARCH (web search через OpenAI)
 # =====================================================
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def search_internet(question: str) -> str:
+    """
+    Использует OpenAI Responses API с web_search инструментом для поиска по интернету.
+    """
     try:
         response = client.responses.create(
-            model="gpt-5-mini",
-            input=f"Найди информацию по запросу: {question}. Используй только достоверные источники.",
+            model="gpt-5",                 # поддерживает web_search
+            tools=[{"type": "web_search"}], # включаем web search
+            input=question,
             temperature=0.3,
             max_output_tokens=800
         )
-        # собираем все текстовые части ответа
+        # собираем весь текст из ответа
         result = ""
         for item in response.output:
             if item.type == "message":
@@ -156,7 +156,7 @@ def search_internet(question: str) -> str:
                         result += c.text
         return result.strip()
     except Exception as e:
-        return "Не удалось получить информацию из интернета."
+        return f"Не удалось получить информацию из интернета. Ошибка: {e}"
 
 # =====================================================
 # 💬 ИСТОРИЯ
@@ -170,9 +170,7 @@ MAX_HISTORY = 6
 def ask_assistant(user_id: str, question: str) -> str:
     history = chat_histories.get(user_id, [])
 
-    # =================================================
-    # 1️⃣ SKU ПРИОРИТЕТ
-    # =================================================
+    # 1️⃣ SKU
     product = search_by_sku(question)
     if product:
         context = "🎯 Точное совпадение:\n" + format_product(product)
@@ -185,9 +183,7 @@ def ask_assistant(user_id: str, question: str) -> str:
         response = llm.invoke(messages)
         answer = response.content
     else:
-        # =================================================
-        # 2️⃣ КАТЕГОРИЯ → ВСЕ ТОВАРЫ
-        # =================================================
+        # 2️⃣ КАТЕГОРИЯ
         category = determine_category(question, llm)
         if category:
             products = filter_by_category(catalog_memory, category)
@@ -207,18 +203,13 @@ def ask_assistant(user_id: str, question: str) -> str:
                 response = llm.invoke(messages)
                 answer = response.content
         else:
-            # =================================================
-            # 3️⃣ INTERNET SEARCH (fallback)
-            # =================================================
+            # 3️⃣ INTERNET SEARCH
             web_info = search_internet(question)
             if web_info:
                 answer = f"🌐 Информация из интернета:\n{web_info}"
             else:
                 answer = "Не удалось найти информацию. Уточните запрос."
 
-    # =================================================
-    # СОХРАНЕНИЕ ИСТОРИИ
-    # =================================================
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
     chat_histories[user_id] = history[-MAX_HISTORY * 2:]
