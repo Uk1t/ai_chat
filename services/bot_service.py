@@ -1,11 +1,14 @@
 import os
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 from services.main_data import ProductCatalogLoader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+# Новый импорт для web search
+from openai import OpenAI
 
 load_dotenv()
 
@@ -52,7 +55,6 @@ sku_index: Dict[str, dict] = {}
 
 for d in all_docs:
     meta = d.metadata
-
     item = {
         "id": str(meta.get("id")),
         "name": meta.get("name") or meta.get("title"),
@@ -65,7 +67,6 @@ for d in all_docs:
         "manufacturer": meta.get("manufacturer"),
         "analogs_ids": meta.get("analogs_ids", []),
     }
-
     catalog_memory.append(item)
 
     # 🔥 индекс по SKU
@@ -78,7 +79,6 @@ print(f"✅ Товаров: {len(catalog_memory)}, SKU в индексе: {len(s
 # =====================================================
 # 🔍 ПОИСК SKU
 # =====================================================
-
 def extract_sku(query: str) -> Optional[str]:
     patterns = [
         r'\b([A-Z]{2,}-?[A-Z0-9/]{3,})\b',
@@ -86,40 +86,31 @@ def extract_sku(query: str) -> Optional[str]:
         r'\b(\d{4,}[A-Z]?)\b',
     ]
     query = query.upper()
-
     for pattern in patterns:
         match = re.search(pattern, query)
         if match:
             return match.group(1).lower()
-
     return None
-
 
 def search_by_sku(query: str) -> Optional[dict]:
     sku = extract_sku(query)
-
     if sku and sku in sku_index:
         return sku_index[sku]
-
     return None
 
 # =====================================================
 # 🔧 ВСПОМОГАТЕЛЬНЫЕ
 # =====================================================
-
 def filter_by_category(products: List[dict], category: str) -> List[dict]:
     return [p for p in products if p["main_category"] == category]
 
-
 def format_product(p: dict) -> str:
     analogs = " | 🔁 аналоги" if p.get("analogs_ids") else ""
-
     return (
         f"{p['name']} (Арт. {p['id']}) | "
         f"Ост: {p['stock']} | "
         f"Цена: {p['price']}{analogs}"
     )
-
 
 def determine_category(question: str, llm) -> Optional[str]:
     prompt = (
@@ -128,7 +119,6 @@ def determine_category(question: str, llm) -> Optional[str]:
         f"Категории:\n" + "\n".join(KEY_CATEGORIES) +
         "\n\nОтветь ТОЛЬКО названием категории или 'Нет'."
     )
-
     try:
         res = llm.invoke([HumanMessage(content=prompt)])
         answer = res.content.strip()
@@ -146,6 +136,29 @@ llm = ChatOpenAI(
 )
 
 # =====================================================
+# 🌐 WEB SEARCH (только newkey.ru)
+# =====================================================
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def search_site_newkey(question: str) -> str:
+    try:
+        query = f"site:newkey.ru {question}"
+        response = client.responses.create(
+            model="gpt-5-mini",
+            tools=[{"type": "web_search"}],
+            input=query
+        )
+        result = ""
+        for item in response.output:
+            if item.type == "message":
+                for c in item.content:
+                    if c.type == "output_text":
+                        result += c.text
+        return result.strip()
+    except Exception as e:
+        return "Не удалось получить данные с сайта."
+
+# =====================================================
 # 💬 ИСТОРИЯ
 # =====================================================
 chat_histories: Dict[str, List] = {}
@@ -155,24 +168,20 @@ MAX_HISTORY = 6
 # 🚀 ОСНОВНАЯ ЛОГИКА
 # =====================================================
 def ask_assistant(user_id: str, question: str) -> str:
-
     history = chat_histories.get(user_id, [])
 
     # =================================================
     # 1️⃣ SKU ПРИОРИТЕТ
     # =================================================
     product = search_by_sku(question)
-
     if product:
         context = "🎯 Точное совпадение:\n" + format_product(product)
-
         messages = [
             SystemMessage(content=SYSTEM_PROMPT),
             SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
         ]
         messages.extend(history[-MAX_HISTORY:])
         messages.append(HumanMessage(content=question))
-
         response = llm.invoke(messages)
         answer = response.content
 
@@ -181,31 +190,32 @@ def ask_assistant(user_id: str, question: str) -> str:
         # 2️⃣ КАТЕГОРИЯ → ВСЕ ТОВАРЫ
         # =================================================
         category = determine_category(question, llm)
-
-        if not category:
-            return "Уточните, пожалуйста, категорию товара (кран, клапан, фитинг и т.д.)"
-
-        products = filter_by_category(catalog_memory, category)
-
-        if not products:
-            return f"В категории '{category}' ничего не найдено."
-
-        if len(products) > 150:
-            products = products[:150]
-
-        lines = [format_product(p) for p in products]
-
-        context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
-
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-        ]
-        messages.extend(history[-MAX_HISTORY:])
-        messages.append(HumanMessage(content=question))
-
-        response = llm.invoke(messages)
-        answer = response.content
+        if category:
+            products = filter_by_category(catalog_memory, category)
+            if not products:
+                answer = f"В категории '{category}' ничего не найдено."
+            else:
+                if len(products) > 150:
+                    products = products[:150]
+                lines = [format_product(p) for p in products]
+                context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+                messages = [
+                    SystemMessage(content=SYSTEM_PROMPT),
+                    SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+                ]
+                messages.extend(history[-MAX_HISTORY:])
+                messages.append(HumanMessage(content=question))
+                response = llm.invoke(messages)
+                answer = response.content
+        else:
+            # =================================================
+            # 3️⃣ WEB SEARCH (fallback по newkey.ru)
+            # =================================================
+            site_answer = search_site_newkey(question)
+            if site_answer:
+                answer = f"📘 Информация с сайта:\n{site_answer}"
+            else:
+                answer = "Уточните, пожалуйста, категорию товара (кран, клапан, фитинг и т.д.)"
 
     # =================================================
     # СОХРАНЕНИЕ ИСТОРИИ
@@ -222,13 +232,10 @@ def ask_assistant(user_id: str, question: str) -> str:
 if __name__ == "__main__":
     print("🤖 Бот готов. Введите 'exit'")
     user_id = "test_user"
-
     while True:
         q = input("\n❓ ").strip()
-
         if q.lower() in ("exit", "quit"):
             break
-
         try:
             print("\n🤖", ask_assistant(user_id, q))
         except Exception as e:
