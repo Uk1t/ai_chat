@@ -103,6 +103,7 @@ def determine_category(question: str, llm) -> Optional[str]:
         return None
 
 def get_last_sku_context(history: List) -> Optional[str]:
+    """Ищем последний показанный SKU в истории"""
     for msg in reversed(history):
         text = msg.content or ""
         for candidate in re.findall(r"\b([A-Z0-9\-]+)\b", text):
@@ -140,7 +141,7 @@ def search_internet(question: str) -> str:
 # История
 chat_histories: Dict[str, List] = {}
 
-# Логика
+# 🚀 ЛОГИКА
 def ask_assistant(user_id: str, question: str) -> str:
     history = chat_histories.get(user_id, [])
     question_lower = question.lower()
@@ -151,12 +152,11 @@ def ask_assistant(user_id: str, question: str) -> str:
     if product:
         context = "🎯 Точное совпадение:\n" + format_product(product)
         messages = [SystemMessage(content=SYSTEM_PROMPT)]
-        messages.extend(history[-6:])  # последние 3 пары (чтобы LLM видел диалог)
+        messages.extend(history[-6:])  # последние 3 пары
         messages.append(HumanMessage(content=question))
         messages.append(SystemMessage(content=f"📦 КАТАЛОГ:\n{context}"))
         response = llm.invoke(messages)
         answer = response.content
-
     else:
         # 2️⃣ Попытка использовать последний SKU из истории
         last_sku = get_last_sku_context(history)
@@ -204,7 +204,7 @@ def ask_assistant(user_id: str, question: str) -> str:
     # Сохраняем историю
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    chat_histories[user_id] = history[-12:]  # сохраняем до 12 последних сообщений
+    chat_histories[user_id] = history[-12:]
 
     return answer
 
