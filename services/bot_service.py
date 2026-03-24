@@ -170,50 +170,56 @@ MAX_HISTORY = 6
 def ask_assistant(user_id: str, question: str) -> str:
     history = chat_histories.get(user_id, [])
 
-    # 1️⃣ SKU
-    product = search_by_sku(question)
-    if product:
-        context = "🎯 Точное совпадение:\n" + format_product(product)
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-        ]
-        messages.extend(history[-MAX_HISTORY:])
-        messages.append(HumanMessage(content=question))
-        response = llm.invoke(messages)
-        answer = response.content
+    # проверяем, похоже ли, что вопрос о термине
+    question_lower = question.lower()
+    is_definition_query = any(word in question_lower for word in ["что такое", "определение", "термин", "объясни"])
+
+    if is_definition_query:
+        # делаем web-search сразу
+        web_info = search_internet(question)
+        answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
+
     else:
-        # 2️⃣ КАТЕГОРИЯ
-        category = determine_category(question, llm)
-        if category:
-            products = filter_by_category(catalog_memory, category)
-            if not products:
-                answer = f"В категории '{category}' ничего не найдено."
-            else:
-                if len(products) > 150:
-                    products = products[:150]
-                lines = [format_product(p) for p in products]
-                context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
-                messages = [
-                    SystemMessage(content=SYSTEM_PROMPT),
-                    SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-                ]
-                messages.extend(history[-MAX_HISTORY:])
-                messages.append(HumanMessage(content=question))
-                response = llm.invoke(messages)
-                answer = response.content
+        # 1️⃣ SKU
+        product = search_by_sku(question)
+        if product:
+            context = "🎯 Точное совпадение:\n" + format_product(product)
+            messages = [
+                SystemMessage(content=SYSTEM_PROMPT),
+                SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+            ]
+            messages.extend(history[-MAX_HISTORY:])
+            messages.append(HumanMessage(content=question))
+            response = llm.invoke(messages)
+            answer = response.content
         else:
-            # 3️⃣ INTERNET SEARCH
-            web_info = search_internet(question)
-            if web_info:
-                answer = f"🌐 Информация из интернета:\n{web_info}"
+            # 2️⃣ КАТЕГОРИЯ
+            category = determine_category(question, llm)
+            if category:
+                products = filter_by_category(catalog_memory, category)
+                if not products:
+                    answer = f"В категории '{category}' ничего не найдено."
+                else:
+                    if len(products) > 150:
+                        products = products[:150]
+                    lines = [format_product(p) for p in products]
+                    context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+                    messages = [
+                        SystemMessage(content=SYSTEM_PROMPT),
+                        SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+                    ]
+                    messages.extend(history[-MAX_HISTORY:])
+                    messages.append(HumanMessage(content=question))
+                    response = llm.invoke(messages)
+                    answer = response.content
             else:
-                answer = "Не удалось найти информацию. Уточните запрос."
+                # 3️⃣ fallback web search
+                web_info = search_internet(question)
+                answer = f"🌐 Информация из интернета:\n{web_info}" if web_info else "Не удалось найти информацию."
 
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
     chat_histories[user_id] = history[-MAX_HISTORY * 2:]
-
     return answer
 
 # =====================================================
