@@ -144,8 +144,6 @@ def search_internet(question: str) -> str:
             model="gpt-5",                 # поддерживает web_search
             tools=[{"type": "web_search"}], # включаем web search
             input=question,
-            temperature=0.3,
-            max_output_tokens=800
         )
         # собираем весь текст из ответа
         result = ""
