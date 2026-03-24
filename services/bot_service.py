@@ -110,6 +110,20 @@ def determine_category(question: str, llm) -> Optional[str]:
     except:
         return None
 
+def get_last_sku_context(history: List) -> Optional[str]:
+    """
+    Ищем в истории последнее упоминание SKU из каталога.
+    Возвращаем SKU (строку), если нашли.
+    """
+    for msg in reversed(history):
+        if msg.content:
+            matches = re.findall(r"\b([A-Z0-9\-]+)\b", msg.content)
+            for candidate in matches:
+                candidate_lower = candidate.lower()
+                if candidate_lower in sku_index:
+                    return candidate_lower
+    return None
+
 # =====================================================
 # 🤖 LLM
 # =====================================================
@@ -125,10 +139,6 @@ llm = ChatOpenAI(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def search_internet(question: str) -> str:
-    """
-    Использует OpenAI Responses API с web_search инструментом.
-    Ограничиваем поиск только по терминам и стандартам арматуры.
-    """
     try:
         response = client.responses.create(
             model="gpt-5",
@@ -164,46 +174,54 @@ def ask_assistant(user_id: str, question: str) -> str:
     if product:
         context = "🎯 Точное совпадение:\n" + format_product(product)
         messages_to_send = [SystemMessage(content=SYSTEM_PROMPT)]
-        # Берем последние 3 пары сообщений (Human+AI), максимум 6 элементов
-        messages_to_send.extend(history[-6:])
-        # Добавляем текущий вопрос
+        messages_to_send.extend(history[-MAX_HISTORY*2:])  # последние 3-4 пары
         messages_to_send.append(HumanMessage(content=question))
-        # Добавляем контекст по SKU
         messages_to_send.append(SystemMessage(content=f"📦 КАТАЛОГ:\n{context}"))
         response = llm.invoke(messages_to_send)
         answer = response.content
     else:
-        # 2️⃣ Поиск по категории
-        category = determine_category(question, llm)
-        if category:
-            products = filter_by_category(catalog_memory, category)
-            if not products:
-                answer = f"В категории '{category}' ничего не найдено."
+        # 2️⃣ Проверка на уточняющий вопрос про последний SKU
+        last_sku = get_last_sku_context(history)
+        if last_sku:
+            product = sku_index[last_sku]
+            if any(word in question_lower for word in ["цена", "стоимость", "под заказ"]):
+                answer = f"Цена позиции {product['name']} (Арт. {product['id']}): {product['price']} руб."
+            elif any(word in question_lower for word in ["остаток", "сколько есть", "наличие"]):
+                answer = f"Остаток позиции {product['name']} (Арт. {product['id']}): {product['stock']}."
             else:
-                if len(products) > 150:
-                    products = products[:150]
-                lines = [format_product(p) for p in products]
-                context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
-                messages_to_send = [SystemMessage(content=SYSTEM_PROMPT)]
-                messages_to_send.extend(history[-6:])
-                messages_to_send.append(HumanMessage(content=question))
-                messages_to_send.append(SystemMessage(content=f"📦 КАТАЛОГ:\n{context}"))
-                response = llm.invoke(messages_to_send)
-                answer = response.content
+                # если уточнение непонятное, но есть SKU — показать краткий контекст
+                answer = f"{format_product(product)}"
         else:
-            # 3️⃣ Определение термина (только если явно про термин)
-            if is_definition_query:
-                web_info = search_internet(question)
-                answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
+            # 3️⃣ Поиск по категории
+            category = determine_category(question, llm)
+            if category:
+                products = filter_by_category(catalog_memory, category)
+                if not products:
+                    answer = f"В категории '{category}' ничего не найдено."
+                else:
+                    if len(products) > 150:
+                        products = products[:150]
+                    lines = [format_product(p) for p in products]
+                    context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+                    messages_to_send = [SystemMessage(content=SYSTEM_PROMPT)]
+                    messages_to_send.extend(history[-MAX_HISTORY*2:])
+                    messages_to_send.append(HumanMessage(content=question))
+                    messages_to_send.append(SystemMessage(content=f"📦 КАТАЛОГ:\n{context}"))
+                    response = llm.invoke(messages_to_send)
+                    answer = response.content
             else:
-                # 4️⃣ Вне темы
-                answer = "Не могу ответить — вопрос вне темы запорной арматуры."
+                # 4️⃣ Определение термина (только если явно про термин)
+                if is_definition_query:
+                    web_info = search_internet(question)
+                    answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
+                else:
+                    # 5️⃣ Вне темы
+                    answer = "Не могу ответить — вопрос вне темы запорной арматуры."
 
     # Сохраняем историю
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    # Храним последние 12 сообщений (6 пар)
-    chat_histories[user_id] = history[-12:]
+    chat_histories[user_id] = history[-MAX_HISTORY*4:]  # сохраняем до 12 последних сообщений
     return answer
 
 # =====================================================
