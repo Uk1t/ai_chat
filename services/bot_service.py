@@ -159,44 +159,45 @@ def ask_assistant(user_id: str, question: str) -> str:
     question_lower = question.lower()
     is_definition_query = any(word in question_lower for word in ["что такое", "определение", "термин", "объясни"])
 
-    if is_definition_query:
-        # 1️⃣ web search для терминов
-        web_info = search_internet(question)
-        answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
+    # 1️⃣ Поиск по SKU
+    product = search_by_sku(question)
+    if product:
+        context = "🎯 Точное совпадение:\n" + format_product(product)
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+        ]
+        messages.extend(history[-MAX_HISTORY:])
+        messages.append(HumanMessage(content=question))
+        response = llm.invoke(messages)
+        answer = response.content
     else:
-        # 2️⃣ SKU
-        product = search_by_sku(question)
-        if product:
-            context = "🎯 Точное совпадение:\n" + format_product(product)
-            messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
-                SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-            ]
-            messages.extend(history[-MAX_HISTORY:])
-            messages.append(HumanMessage(content=question))
-            response = llm.invoke(messages)
-            answer = response.content
-        else:
-            # 3️⃣ Категория
-            category = determine_category(question, llm)
-            if category:
-                products = filter_by_category(catalog_memory, category)
-                if not products:
-                    answer = f"В категории '{category}' ничего не найдено."
-                else:
-                    if len(products) > 150:
-                        products = products[:150]
-                    lines = [format_product(p) for p in products]
-                    context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
-                    messages = [
-                        SystemMessage(content=SYSTEM_PROMPT),
-                        SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-                    ]
-                    messages.extend(history[-MAX_HISTORY:])
-                    messages.append(HumanMessage(content=question))
-                    response = llm.invoke(messages)
-                    answer = response.content
+        # 2️⃣ Поиск по категории
+        category = determine_category(question, llm)
+        if category:
+            products = filter_by_category(catalog_memory, category)
+            if not products:
+                answer = f"В категории '{category}' ничего не найдено."
             else:
+                if len(products) > 150:
+                    products = products[:150]
+                lines = [format_product(p) for p in products]
+                context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
+                messages = [
+                    SystemMessage(content=SYSTEM_PROMPT),
+                    SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
+                ]
+                messages.extend(history[-MAX_HISTORY:])
+                messages.append(HumanMessage(content=question))
+                response = llm.invoke(messages)
+                answer = response.content
+        else:
+            # 3️⃣ Определение термина (только если явно про термин)
+            if is_definition_query:
+                web_info = search_internet(question)
+                answer = f"🌐 Определение из интернета:\n{web_info}" if web_info else "Не удалось найти определение."
+            else:
+                # 4️⃣ Вне темы
                 answer = "Не могу ответить — вопрос вне темы запорной арматуры."
 
     history.append(HumanMessage(content=question))
