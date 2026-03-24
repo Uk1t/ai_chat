@@ -163,13 +163,14 @@ def ask_assistant(user_id: str, question: str) -> str:
     product = search_by_sku(question)
     if product:
         context = "🎯 Точное совпадение:\n" + format_product(product)
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-        ]
-        messages.extend(history[-MAX_HISTORY:])
-        messages.append(HumanMessage(content=question))
-        response = llm.invoke(messages)
+        messages_to_send = [SystemMessage(content=SYSTEM_PROMPT)]
+        # Берем последние 3 пары сообщений (Human+AI), максимум 6 элементов
+        messages_to_send.extend(history[-6:])
+        # Добавляем текущий вопрос
+        messages_to_send.append(HumanMessage(content=question))
+        # Добавляем контекст по SKU
+        messages_to_send.append(SystemMessage(content=f"📦 КАТАЛОГ:\n{context}"))
+        response = llm.invoke(messages_to_send)
         answer = response.content
     else:
         # 2️⃣ Поиск по категории
@@ -183,13 +184,11 @@ def ask_assistant(user_id: str, question: str) -> str:
                     products = products[:150]
                 lines = [format_product(p) for p in products]
                 context = f"📁 Категория: {category} ({len(products)} товаров)\n" + "\n".join(lines)
-                messages = [
-                    SystemMessage(content=SYSTEM_PROMPT),
-                    SystemMessage(content=f"📦 КАТАЛОГ:\n{context}")
-                ]
-                messages.extend(history[-MAX_HISTORY:])
-                messages.append(HumanMessage(content=question))
-                response = llm.invoke(messages)
+                messages_to_send = [SystemMessage(content=SYSTEM_PROMPT)]
+                messages_to_send.extend(history[-6:])
+                messages_to_send.append(HumanMessage(content=question))
+                messages_to_send.append(SystemMessage(content=f"📦 КАТАЛОГ:\n{context}"))
+                response = llm.invoke(messages_to_send)
                 answer = response.content
         else:
             # 3️⃣ Определение термина (только если явно про термин)
@@ -200,9 +199,11 @@ def ask_assistant(user_id: str, question: str) -> str:
                 # 4️⃣ Вне темы
                 answer = "Не могу ответить — вопрос вне темы запорной арматуры."
 
+    # Сохраняем историю
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    chat_histories[user_id] = history[-MAX_HISTORY*2:]
+    # Храним последние 12 сообщений (6 пар)
+    chat_histories[user_id] = history[-12:]
     return answer
 
 # =====================================================
