@@ -1,4 +1,4 @@
-(function() {
+(function () {
     const BASE_URL = "http://72.56.23.114";
 
     async function init() {
@@ -16,14 +16,19 @@
         const input = document.getElementById("chat-input");
         const btn = document.getElementById("chat-send");
 
-        const USER_ID = "guest_" + Math.floor(Math.random() * 100000);
+        let USER_ID = localStorage.getItem("chat_user_id");
+
+        if (!USER_ID) {
+            USER_ID = "guest_" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("chat_user_id", USER_ID);
+        }
 
         function addMessage(who, text) {
             const div = document.createElement("div");
             div.textContent = `${who}: ${text}`;
-            div.style.color = "white" ;
+            div.style.color = "white";
             div.style.maxWidth = '85%'
-            div.style.marginLeft = who ==="Вы" ? "auto" : "0"
+            div.style.marginLeft = who === "Вы" ? "auto" : "0"
             div.style.marginBottom = '5px'
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
