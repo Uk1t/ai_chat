@@ -41,48 +41,48 @@
             div.style.color = "white";
             div.style.maxWidth = '85%'
             div.style.marginLeft = who === "Вы" ? "auto" : "0"
-            div.classList.add(who === "Вы" ? "" : "bot")
+            div.classList.add(who === "Вы" ? "user" : "bot");
             div.style.marginBottom = '5px'
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
 
         async function sendMessage() {
-    const text = input.value.trim();
-    if (!text) return;
+            const text = input.value.trim();
+            if (!text) return;
 
-    addMessage("Вы", text);
-    input.value = "";
+            addMessage("Вы", text);
+            input.value = "";
 
-    // Показываем индикатор
-    const typingDiv = document.createElement("div");
-    typingDiv.id = "bot-typing";
-    typingDiv.textContent = "Бот печатает...";
-    typingDiv.style.color = "white";
-    typingDiv.style.fontStyle = "italic";
-    chat.appendChild(typingDiv);
-    chat.scrollTop = chat.scrollHeight;
+            // Показываем индикатор
+            const typingDiv = document.createElement("div");
+            typingDiv.id = "bot-typing";
+            typingDiv.textContent = "Бот печатает...";
+            typingDiv.style.color = "white";
+            typingDiv.style.fontStyle = "italic";
+            chat.appendChild(typingDiv);
+            chat.scrollTop = chat.scrollHeight;
 
-    try {
-        const res = await fetch(`${BASE_URL}/ai/ask`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                user_id: USER_ID,
-                description: text
-            })
-        });
+            try {
+                const res = await fetch(`${BASE_URL}/ai/ask`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        description: text
+                    })
+                });
 
-        const data = await res.json();
+                const data = await res.json();
 
-        typingDiv.remove();
+                typingDiv.remove();
 
-        addMessage("Бот", data.answer);
-    } catch (e) {
-        typingDiv.remove();
-        addMessage("Бот", "Ошибка при ответе сервера.");
-    }
-}
+                addMessage("Бот", data.answer);
+            } catch (e) {
+                typingDiv.remove();
+                addMessage("Бот", "Ошибка при ответе сервера.");
+            }
+        }
 
         btn.onclick = sendMessage;
         input.addEventListener("keypress", e => {
