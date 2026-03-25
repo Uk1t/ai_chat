@@ -29,6 +29,7 @@
 
             const history = data.history || [];
 
+
             history.forEach(msg => {
                 addMessage(msg.role === "user" ? "Вы" : "Бот", msg.content);
             });
@@ -46,24 +47,41 @@
         }
 
         async function sendMessage() {
-            const text = input.value.trim();
-            if (!text) return;
+    const text = input.value.trim();
+    if (!text) return;
 
-            addMessage("Вы", text);
-            input.value = "";
+    addMessage("Вы", text);
+    input.value = "";
 
-            const res = await fetch(`${BASE_URL}/ai/ask`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                    user_id: USER_ID,
-                    description: text
-                })
-            });
+    // Показываем индикатор
+    const typingDiv = document.createElement("div");
+    typingDiv.id = "bot-typing";
+    typingDiv.textContent = "Бот печатает...";
+    typingDiv.style.color = "white";
+    typingDiv.style.fontStyle = "italic";
+    chat.appendChild(typingDiv);
+    chat.scrollTop = chat.scrollHeight;
 
-            const data = await res.json();
-            addMessage("Бот", data.answer);
-        }
+    try {
+        const res = await fetch(`${BASE_URL}/ai/ask`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                user_id: USER_ID,
+                description: text
+            })
+        });
+
+        const data = await res.json();
+
+        typingDiv.remove();
+
+        addMessage("Бот", data.answer);
+    } catch (e) {
+        typingDiv.remove();
+        addMessage("Бот", "Ошибка при ответе сервера.");
+    }
+}
 
         btn.onclick = sendMessage;
         input.addEventListener("keypress", e => {
