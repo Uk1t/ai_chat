@@ -23,6 +23,17 @@
             localStorage.setItem("chat_user_id", USER_ID);
         }
 
+        async function loadHistory() {
+            const res = await fetch(`${BASE_URL}/ai/history?user_id=${USER_ID}`);
+            const data = await res.json();
+
+            const history = data.history || [];
+
+            history.forEach(msg => {
+                addMessage(msg.role === "user" ? "Вы" : "Бот", msg.content);
+            });
+        }
+
         function addMessage(who, text) {
             const div = document.createElement("div");
             div.textContent = `${who}: ${text}`;
@@ -58,6 +69,7 @@
         input.addEventListener("keypress", e => {
             if (e.key === "Enter") sendMessage();
         });
+        await loadHistory();
     }
 
     init();
