@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+from langchain_core.messages import HumanMessage
+
 from schemas import Question, Answer
 from services.bot_service import ask_assistant, chat_histories
 
@@ -16,12 +18,13 @@ def get_history(user_id: str):
     Возвращает историю чата для конкретного пользователя
     """
     history = chat_histories.get(user_id, [])
-    # приводим к JSON-формату
+
     return {
         "history": [
-            {"role": "user" if isinstance(m, Question) or getattr(m, 'role', '')=='user' else 'bot',
-             "content": m.content}
-            if hasattr(m, 'content') else {"role":"unknown","content":str(m)}
+            {
+                "role": "user" if isinstance(m, HumanMessage) else "bot",
+                "content": m.content
+            }
             for m in history
         ]
     }
