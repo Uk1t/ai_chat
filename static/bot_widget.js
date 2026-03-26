@@ -73,12 +73,22 @@
                     })
                 });
 
-                const data = await res.json();
+                const textResponse = await res.text(); // 👈 сначала текст
+
+                let data;
+
+                try {
+                    data = JSON.parse(textResponse);
+                } catch (e) {
+                    console.error("RAW RESPONSE:", textResponse);
+                    throw new Error("JSON parse failed");
+                }
 
                 typingDiv.remove();
-
                 addMessage("Бот", data.answer);
+
             } catch (e) {
+                console.error(e);
                 typingDiv.remove();
                 addMessage("Бот", "Ошибка при ответе сервера.");
             }
