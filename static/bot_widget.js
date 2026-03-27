@@ -9,7 +9,7 @@
         const wrapper = document.createElement("div");
         wrapper.innerHTML = html;
         document.body.appendChild(wrapper);
-        
+
         const chat = document.getElementById("chat-messages");
         const input = document.getElementById("chat-input");
         const btn = document.getElementById("chat-send");
@@ -35,7 +35,7 @@
 
         function addMessage(who, text) {
             const div = document.createElement("div");
-            div.textContent = `${who}: ${text}`;
+            div.innerHTML = `<b>${who}:</b><br>${text}`
             div.style.color = "white";
             div.style.maxWidth = '85%'
             div.style.marginLeft = who === "Вы" ? "auto" : "0"
