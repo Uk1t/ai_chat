@@ -3,15 +3,13 @@
 
     async function init() {
 
-        // 🔥 1. загружаем HTML с сервера
         const res = await fetch(`${BASE_URL}/widget`);
         const html = await res.text();
 
         const wrapper = document.createElement("div");
         wrapper.innerHTML = html;
         document.body.appendChild(wrapper);
-
-        // 🔥 2. находим элементы из шаблона
+        
         const chat = document.getElementById("chat-messages");
         const input = document.getElementById("chat-input");
         const btn = document.getElementById("chat-send");
@@ -73,7 +71,7 @@
                     })
                 });
 
-                const textResponse = await res.text(); // 👈 сначала текст
+                const textResponse = await res.text();
 
                 let data;
 
