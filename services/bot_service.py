@@ -102,8 +102,7 @@ def search_site(question: str) -> str:
         query = f"site:newkey.ru {question} (товар OR купить OR артикул)"
 
         response = client.responses.create(
-            model="gpt-5",
-            tools=[{"type": "web_search"}],
+            model="gpt-5-mini",
             input=query
         )
 
