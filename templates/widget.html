@@ -11,25 +11,40 @@
     border-radius: 16px;
 ">
 
-    <div class="" style="background-color: #004225;position: relative;border-radius: 8px 8px 0 0 ">
-        <div class=""
-             style=" height: 54px; display: flex; justify-content: flex-start; align-items: center; gap: 10px;padding: 10px;">
+    <div style="background-color: #004225; position: relative; border-radius: 8px 8px 0 0;">
+        <div style="height: 54px; display: flex; justify-content: flex-start; align-items: center; gap: 10px; padding: 10px; flex:1;">
             <img src="/static/icons/logo.png" alt="logo" width="30px">
-            <span style="color: white">Помощник в НьюКей</span>
+            <span style="color: white; flex:1;">Помощник в НьюКей</span>
         </div>
-        <div class="">
+
+        <div id="ai-widget-close" style="
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        ">×</div>
+
+        <div>
             <img src="/static/icons/ai.png" alt="ai" style="width: 56px;position: relative;z-index: 9;left: 40px;">
         </div>
         <img src="/static/icons/Exclude.png" style="position: absolute; left: 11px; bottom: 0;width: 115px" alt="item">
     </div>
-    <div class="" style="padding: 10px; height: 80vh;flex-direction: column;display: flex;border-radius: 8px">
-        <div id="chat-messages" style="flex:1; overflow-y:auto; margin-bottom:10px;border-radius: 8px;padding: 5px;
-    border: #00000026 1px solid;">
+
+    <div style="padding: 10px; height: 80vh; flex-direction: column; display: flex; border-radius: 8px;">
+        <div id="chat-messages" style="flex:1; overflow-y:auto; margin-bottom:10px; border-radius: 8px; padding: 5px; border: #00000026 1px solid;">
             <div style="color: white; max-width: 85%; margin-left: 0px; margin-bottom: 5px;">Бот: Добрый день, я ваш бот-ассистент, я могу подсказать по товару, а также некоторую информацию, которая касается запорной арматуры.</div>
         </div>
 
         <div style="display:flex;">
-            <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1;border: #00000026 1px solid;padding: 5px;">
+            <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1; border: #00000026 1px solid; padding: 5px;">
             <svg id="chat-send" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"
                  fill="none" style="cursor:pointer;">
                 <path d="M6.66406 30.8332V9.1665L32.3691 19.9998L6.66406 30.8332ZM8.33073 28.3332L28.0807 19.9998L8.33073 11.6665V18.1415L16.4074 19.9998L8.33073 21.8598V28.3332Z"
@@ -37,23 +52,7 @@
             </svg>
         </div>
     </div>
-
 </div>
-
-<style>
-#chat-messages{
-    .bot{
-        background: #050a0775 !important;
-    }
-    div{
-        color: white;
-        background: #164225;
-        padding: 5px;
-        border-radius: 8px;
-        margin-bottom: 5px;
-    }
-}
-</style>
 
 <script>
 (function() {
@@ -62,8 +61,8 @@
     const chat = document.getElementById("chat-messages");
     const input = document.getElementById("chat-input");
     const btn = document.getElementById("chat-send");
+    const closeBtn = document.getElementById("ai-widget-close"); // крестик
 
-    // Генерация/получение user_id
     let USER_ID = localStorage.getItem("chat_user_id");
     if (!USER_ID) {
         USER_ID = "guest_" + Math.random().toString(36).substring(2, 10);
@@ -119,6 +118,10 @@
 
     btn.addEventListener("click", sendMessage);
     input.addEventListener("keydown", e => { if(e.key === "Enter") sendMessage(); });
+
+    closeBtn.addEventListener("click", () => {
+        document.getElementById("ai-bot-widget").style.display = "none";
+    });
 
     loadHistory();
 })();
