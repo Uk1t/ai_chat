@@ -45,7 +45,7 @@ def widget_js():
         toggleButton.style.alignItems = 'center';
         toggleButton.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
         toggleButton.style.margin = '5px';
-        toggleButton.innerHTML = '<span style="color:white;font-size:24px;">💬</span>';
+        toggleButton.innerHTML = '<img src="http://72.56.23.114/static/icons/ai.png" alt="logo_ai" width="30px">';
 
         // Переключение iframe
         toggleButton.addEventListener('click', () => {
