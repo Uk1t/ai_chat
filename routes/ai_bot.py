@@ -1,10 +1,33 @@
 from fastapi import APIRouter
 from langchain_core.messages import HumanMessage
+from fastapi.responses import Response
 
 from schemas import Question, Answer
 from services.bot_service import ask_assistant, chat_histories
 
 router = APIRouter(prefix="/ai", tags=["AI bot"])
+
+
+@router.get("/widget.js")
+def widget_js():
+    return Response(
+        content="""
+(function() {
+    const iframe = document.createElement('iframe');
+    iframe.src = 'http://72.56.23.114/widget';
+    iframe.style.position = 'fixed';
+    iframe.style.bottom = '20px';
+    iframe.style.right = '20px';
+    iframe.style.width = '400px';
+    iframe.style.height = '600px';
+    iframe.style.border = 'none';
+    iframe.style.zIndex = '9999';
+
+    document.body.appendChild(iframe);
+})();
+        """,
+        media_type="application/javascript"
+    )
 
 @router.post("/ask", response_model=Answer)
 def ask_bot(question: Question):
