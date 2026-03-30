@@ -50,6 +50,7 @@ def widget_js():
         // Переключение iframe
         toggleButton.addEventListener('click', () => {
             iframe.style.display = iframe.style.display === 'none' ? 'block' : 'none';
+            document.querySelector('html').classList.remove('crm-widget-button-mobile')
         });
 
         parent.appendChild(toggleButton);
