@@ -13,9 +13,11 @@ def widget_js():
     return Response(
         content="""
 (function() {
+    const BASE_URL = "http://72.56.23.114"; // твой сервер
+
     // Создаем iframe
     const iframe = document.createElement('iframe');
-    iframe.src = 'http://72.56.23.114/widget';
+    iframe.src = BASE_URL + '/widget';
     iframe.style.display = 'none';
     iframe.style.position = 'fixed';
     iframe.style.bottom = '20px';
@@ -27,33 +29,44 @@ def widget_js():
     iframe.id = 'ai-bot-iframe';
     document.body.appendChild(iframe);
 
-    // Создаем круг для открытия/закрытия iframe
-    const toggleButton = document.createElement('div');
-    toggleButton.style.position = 'fixed';
-    toggleButton.style.bottom = '20px';
-    toggleButton.style.right = '20px';
-    toggleButton.style.width = '60px';
-    toggleButton.style.height = '60px';
-    toggleButton.style.borderRadius = '50%';
-    toggleButton.style.backgroundColor = '#004225';
-    toggleButton.style.cursor = 'pointer';
-    toggleButton.style.zIndex = '100000';
-    toggleButton.style.display = 'flex';
-    toggleButton.style.justifyContent = 'center';
-    toggleButton.style.alignItems = 'center';
-    toggleButton.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-    toggleButton.title = 'Открыть/Закрыть чат';
-    toggleButton.innerHTML = '<span style="color:white;font-size:24px;">💬</span>';
-    document.body.appendChild(toggleButton);
+    // Функция для создания кнопки
+    function createButton(parent) {
+        if (document.getElementById('ai-widget-toggle')) return; // уже есть
 
-    // Переключение отображения iframe при клике
-    toggleButton.addEventListener('click', function() {
-        if (iframe.style.display === 'none') {
-            iframe.style.display = 'block';
+        const toggleButton = document.createElement('div');
+        toggleButton.id = 'ai-widget-toggle';
+        toggleButton.style.width = '60px';
+        toggleButton.style.height = '60px';
+        toggleButton.style.borderRadius = '50%';
+        toggleButton.style.backgroundColor = '#004225';
+        toggleButton.style.cursor = 'pointer';
+        toggleButton.style.display = 'flex';
+        toggleButton.style.justifyContent = 'center';
+        toggleButton.style.alignItems = 'center';
+        toggleButton.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+        toggleButton.style.margin = '5px';
+        toggleButton.innerHTML = '<span style="color:white;font-size:24px;">💬</span>';
+
+        // Переключение iframe
+        toggleButton.addEventListener('click', () => {
+            iframe.style.display = iframe.style.display === 'none' ? 'block' : 'none';
+        });
+
+        parent.appendChild(toggleButton);
+    }
+
+    // Ждем появления блока b24-widget-button-social
+    function waitForB24() {
+        const target = document.querySelector('.b24-widget-button-social');
+        if (target) {
+            createButton(target);
         } else {
-            iframe.style.display = 'none';
+            // проверяем каждые 500мс
+            setTimeout(waitForB24, 500);
         }
-    });
+    }
+
+    waitForB24();
 })();
         """,
         media_type="application/javascript"
