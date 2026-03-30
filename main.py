@@ -8,10 +8,10 @@ from routes.ai_bot import router as ai_router
 
 app = FastAPI(title="AI Manager")
 
-# ✅ ВОТ ЭТО КЛЮЧЕВОЕ
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # для теста можно *
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
