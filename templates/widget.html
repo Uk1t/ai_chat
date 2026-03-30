@@ -120,7 +120,7 @@
     input.addEventListener("keydown", e => { if(e.key === "Enter") sendMessage(); });
 
     closeBtn.addEventListener("click", () => {
-        document.getElementById("ai-bot-iframe").style.display = "none";
+    window.parent.document.getElementById("ai-bot-iframe").style.display = "none";
     });
 
     loadHistory();
