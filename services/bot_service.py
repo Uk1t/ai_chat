@@ -92,16 +92,13 @@ MAX_HISTORY = 6
 def ask_assistant(user_id: str, question: str) -> str:
     history = chat_histories.get(user_id, [])
 
-    # 1️⃣ Поиск на сайте
     site_text = search_site(question)
 
-    # 2️⃣ Если данные найдены — генерируем ответ
     if site_text and len(site_text) > 50:
         answer = generate_answer(question, site_text, history)
     else:
         answer = "Не удалось найти информацию на сайте newkey.ru"
 
-    # 3️⃣ Сохраняем историю диалога
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
     chat_histories[user_id] = history[-MAX_HISTORY * 2:]

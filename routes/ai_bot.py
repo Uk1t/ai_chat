@@ -11,7 +11,6 @@ def ask_bot(question: Question):
     answer_text = ask_assistant(user_id=question.user_id, question=question.description)
     return {"answer": answer_text}
 
-# Новый маршрут: получить историю чата
 @router.get("/history")
 def get_history(user_id: str):
     """
@@ -29,7 +28,6 @@ def get_history(user_id: str):
         ]
     }
 
-# Новый маршрут: очистить историю чата
 @router.post("/clear")
 def clear_history(user_id: str):
     chat_histories[user_id] = []
