@@ -66,6 +66,12 @@ def widget_js():
             setTimeout(waitForB24, 500);
         }
     }
+    window.addEventListener("message", (event) => {
+    if (event.data?.action === "close-ai-widget") {
+        const iframe = document.getElementById("ai-bot-iframe");
+        if (iframe) iframe.style.display = "none";
+    }
+});
 
     waitForB24();
 })();
