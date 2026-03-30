@@ -15,6 +15,8 @@ def widget_js():
 (function() {
     const iframe = document.createElement('iframe');
     iframe.src = 'http://72.56.23.114/widget';
+    iframe.classList.add = 'ai_iframe'
+    iframe.style.display = 'none'
     iframe.style.position = 'fixed';
     iframe.style.bottom = '20px';
     iframe.style.right = '20px';
