@@ -26,18 +26,15 @@
         <div id="chat-messages" style="flex:1; overflow-y:auto; margin-bottom:10px;border-radius: 8px;padding: 5px;
     border: #00000026 1px solid;">
             <div style="color: white; max-width: 85%; margin-left: 0px; margin-bottom: 5px;">Бот: Добрый день, я ваш бот-ассистент, я могу подсказать по товару, а также некоторую информацию, которая касается запорной арматуры.</div>
-
         </div>
 
         <div style="display:flex;">
             <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1;border: #00000026 1px solid;padding: 5px;">
-
             <svg id="chat-send" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"
-                 fill="none">
+                 fill="none" style="cursor:pointer;">
                 <path d="M6.66406 30.8332V9.1665L32.3691 19.9998L6.66406 30.8332ZM8.33073 28.3332L28.0807 19.9998L8.33073 11.6665V18.1415L16.4074 19.9998L8.33073 21.8598V28.3332Z"
                       fill="#004225"/>
             </svg>
-
         </div>
     </div>
 
@@ -46,13 +43,13 @@
 <style>
 #chat-messages{
     .bot{
-    background: #050a0775 !important;
+        background: #050a0775 !important;
     }
     div{
         color: white;
-    background: #164225;
-    padding: 5px;
-    border-radius: 8px;
+        background: #164225;
+        padding: 5px;
+        border-radius: 8px;
     }
 }
 </style>
@@ -61,31 +58,21 @@
 (function() {
     const BASE_URL = "http://72.56.23.114"; // твой сервер
 
-    const widget = document.getElementById("ai-bot-widget");
     const chat = document.getElementById("chat-messages");
     const input = document.getElementById("chat-input");
     const btn = document.getElementById("chat-send");
-    const closeBtn = document.getElementById("ai-widget-close");
 
-    // Генерация user_id
+    // Генерация/получение user_id
     let USER_ID = localStorage.getItem("chat_user_id");
     if (!USER_ID) {
-        USER_ID = "guest_" + Math.random().toString(36).substring(2,10);
+        USER_ID = "guest_" + Math.random().toString(36).substring(2, 10);
         localStorage.setItem("chat_user_id", USER_ID);
     }
-
-    // Закрытие виджета
-    closeBtn.addEventListener("click", () => widget.style.display = "none");
 
     function addMessage(who, text) {
         const div = document.createElement("div");
         div.innerHTML = `<b>${who}:</b> ${text}`;
-        div.style.background = who==="Вы" ? "#050a0775" : "#164225";
-        div.style.color = "white";
-        div.style.padding = "5px";
-        div.style.borderRadius = "6px";
-        div.style.maxWidth = "85%";
-        div.style.alignSelf = who==="Вы" ? "flex-end" : "flex-start";
+        div.classList.add(who==="Вы" ? "user" : "bot");
         chat.appendChild(div);
         chat.scrollTop = chat.scrollHeight;
     }
@@ -94,35 +81,35 @@
         try {
             const res = await fetch(`${BASE_URL}/ai/history?user_id=${USER_ID}`);
             const data = await res.json();
-            (data.history||[]).forEach(msg => addMessage(msg.role==="user"?"Вы":"Бот", msg.content));
-        } catch(e) {
-            console.error("Ошибка загрузки истории:", e);
+            (data.history || []).forEach(msg => addMessage(msg.role==="user"?"Вы":"Бот", msg.content));
+        } catch (e) {
+            console.error("Не удалось загрузить историю:", e);
         }
     }
 
     async function sendMessage() {
         const text = input.value.trim();
-        if(!text) return;
+        if (!text) return;
         addMessage("Вы", text);
         input.value = "";
 
         const typingDiv = document.createElement("div");
         typingDiv.textContent = "Бот печатает...";
-        typingDiv.style.fontStyle="italic";
-        typingDiv.style.color="white";
+        typingDiv.style.fontStyle = "italic";
+        typingDiv.style.color = "white";
         chat.appendChild(typingDiv);
         chat.scrollTop = chat.scrollHeight;
 
         try {
             const res = await fetch(`${BASE_URL}/ai/ask`, {
-                method:"POST",
-                headers: {"Content-Type":"application/json"},
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({user_id: USER_ID, description: text})
             });
             const data = await res.json();
             typingDiv.remove();
             addMessage("Бот", data.answer);
-        } catch(e){
+        } catch (e) {
             console.error(e);
             typingDiv.remove();
             addMessage("Бот", "Ошибка при ответе сервера");
@@ -130,7 +117,7 @@
     }
 
     btn.addEventListener("click", sendMessage);
-    input.addEventListener("keydown", e => { if(e.key==="Enter") sendMessage(); });
+    input.addEventListener("keydown", e => { if(e.key === "Enter") sendMessage(); });
 
     loadHistory();
 })();
