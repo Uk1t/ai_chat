@@ -21,7 +21,7 @@ def widget_js():
     iframe.style.width = '400px';
     iframe.style.height = '600px';
     iframe.style.border = 'none';
-    iframe.style.zIndex = '9999';
+    iframe.style.zIndex = '99999';
 
     document.body.appendChild(iframe);
 })();
