@@ -1,40 +1,61 @@
 <div id="ai-bot-widget" style="
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    bottom: 0;
+    right: 0;
     width: 400px;
-    height: 600px;
+    height: 100vh;
     background: #fff;
     z-index: 9999;
     display: flex;
     flex-direction: column;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    overflow: hidden;
 ">
 
-    <!-- Header -->
-    <div style="background-color: #004225; padding: 10px; display: flex; align-items: center; gap: 10px; position: relative;">
-        <img src="/static/icons/logo.png" alt="logo" width="30px">
-        <span style="color: white; font-weight: bold;">Помощник в НьюКей</span>
-        <svg id="ai-widget-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-             fill="white" style="position:absolute; right:10px; cursor:pointer;">
-            <path d="M18 6L6 18M6 6l12 12" stroke="white" stroke-width="2"/>
-        </svg>
+    <div class="" style="background-color: #004225;position: relative;border-radius: 8px 8px 0 0 ">
+        <div class=""
+             style=" height: 54px; display: flex; justify-content: flex-start; align-items: center; gap: 10px;padding: 10px;">
+            <img src="/static/icons/logo.png" alt="logo" width="30px">
+            <span style="color: white">Помощник в НьюКей</span>
+        </div>
+        <div class="">
+            <img src="/static/icons/ai.png" alt="ai" style="width: 56px;position: relative;z-index: 9;left: 40px;">
+        </div>
+        <img src="/static/icons/Exclude.png" style="position: absolute; left: 11px; bottom: 0;width: 115px" alt="item">
     </div>
+    <div class="" style="padding: 10px; height: 80vh;flex-direction: column;display: flex;border-radius: 8px">
+        <div id="chat-messages" style="flex:1; overflow-y:auto; margin-bottom:10px;border-radius: 8px;padding: 5px;
+    border: #00000026 1px solid;">
+            <div style="color: white; max-width: 85%; margin-left: 0px; margin-bottom: 5px;">Бот: Добрый день, я ваш бот-ассистент, я могу подсказать по товару, а также некоторую информацию, которая касается запорной арматуры.</div>
 
-    <!-- Chat messages -->
-    <div id="chat-messages" style="flex:1; overflow-y:auto; padding:10px; background:#164225; display:flex; flex-direction:column; gap:5px;">
-        <div style="color:white;"><b>Бот:</b> Добрый день, я ваш бот-ассистент, могу подсказать по товарам.</div>
-    </div>
+        </div>
 
-    <!-- Input -->
-    <div style="display:flex; border-top:1px solid #00000026; padding:5px;">
-        <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1; padding:5px; border-radius:4px; border:1px solid #ccc;">
-        <button id="chat-send" style="margin-left:5px; background:#004225; color:white; border:none; border-radius:4px; padding:0 12px; cursor:pointer;">Отправить</button>
+        <div style="display:flex;">
+            <input id="chat-input" type="text" placeholder="Ваш вопрос..." style="flex:1;border: #00000026 1px solid;padding: 5px;">
+
+            <svg id="chat-send" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"
+                 fill="none">
+                <path d="M6.66406 30.8332V9.1665L32.3691 19.9998L6.66406 30.8332ZM8.33073 28.3332L28.0807 19.9998L8.33073 11.6665V18.1415L16.4074 19.9998L8.33073 21.8598V28.3332Z"
+                      fill="#004225"/>
+            </svg>
+
+        </div>
     </div>
 
 </div>
+
+<style>
+#chat-messages{
+    .bot{
+    background: #050a0775 !important;
+    }
+    div{
+        color: white;
+    background: #164225;
+    padding: 5px;
+    border-radius: 8px;
+    }
+}
+</style>
 
 <script>
 (function() {
