@@ -132,7 +132,10 @@
             try {
                 const res = await fetch(`${BASE_URL}/ai/ask`, {
                     method: "POST",
-                    headers: {"Content-Type": "application/json"},
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-Widget-Token": window.AI_WIDGET_TOKEN
+                    },
                     body: JSON.stringify({user_id: USER_ID, description: text})
                 });
                 const data = await res.json();
