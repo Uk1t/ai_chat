@@ -56,7 +56,6 @@
             const typingDiv = document.createElement("div");
             typingDiv.id = "bot-typing";
             typingDiv.textContent = "Бот печатает...";
-            typingDiv.style.color = "white";
             typingDiv.style.fontStyle = "italic";
             chat.appendChild(typingDiv);
             chat.scrollTop = chat.scrollHeight;
