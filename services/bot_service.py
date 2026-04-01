@@ -1,10 +1,8 @@
 import os
 from typing import Dict, List
 from dotenv import load_dotenv
-
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from openai import OpenAI
+import openai
+from langchain_core.messages import HumanMessage, AIMessage
 
 load_dotenv()
 
@@ -16,6 +14,11 @@ SYSTEM_PROMPT = """
 
 Ты работаешь ТОЛЬКО с переданными данными с сайта newkey.ru.
 Любая информация вне этих данных запрещена.
+
+ВАЖНО:
+Если пользователь указывает артикул (например NK-BML8/6),
+обязательно выполни поиск и найди точную страницу товара на сайте newkey.ru.
+
 
 Строго:
 - Не придумывать товары, цены, наличие, артикулы.
@@ -31,73 +34,85 @@ SYSTEM_PROMPT = """
 Цена: ...
 
 Если несколько товаров — вывести не более 5 и написать "Есть больше вариантов, уточните параметры".
-
 """
 
 # =====================================================
-# 🤖 LLM
+# 🤖 Yandex GPT
 # =====================================================
-llm = ChatOpenAI(
-    model="gpt-5-mini",
-    temperature=0.2,
-    openai_api_key=os.getenv("OPENAI_API_KEY")
+YANDEX_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_CLOUD_FOLDER_ID")
+YANDEX_MODEL = "yandexgpt"
+
+if not YANDEX_API_KEY:
+    raise ValueError("YANDEX_CLOUD_API_KEY не найден")
+if not YANDEX_FOLDER_ID:
+    raise ValueError("YANDEX_CLOUD_FOLDER_ID не найден")
+
+client = openai.OpenAI(
+    api_key=YANDEX_API_KEY,
+    base_url="https://ai.api.cloud.yandex.net/v1"
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 # =====================================================
-# 🔎 ПОИСК ПО САЙТУ NEWKEY
+# 🧠 GENERATE ANSWER
 # =====================================================
-def search_site(question: str) -> str:
+def generate_answer(question: str, history: List) -> str:
+    history_text = ""
+    for msg in history[-6:]:
+        if isinstance(msg, HumanMessage):
+            history_text += f"Пользователь: {msg.content}\n"
+        elif isinstance(msg, AIMessage):
+            history_text += f"Бот: {msg.content}\n"
+
+    full_input = f"""
+{SYSTEM_PROMPT}
+
+История:
+{history_text}
+
+Вопрос:
+{question}
+"""
+
     try:
-        query = f"site:newkey.ru {question} (товар OR купить OR артикул)"
         response = client.responses.create(
-            model="gpt-5-mini",
-            tools=[{"type": "web_search"}],
-            input=query
+            model=f"gpt://{YANDEX_FOLDER_ID}/{YANDEX_MODEL}",
+            input=full_input,
+            tools=[
+                {
+                    "type": "web_search",
+                    # "filters": {
+                    #     "allowed_domains": ["newkey.ru"]
+                    # }
+                }
+            ],
+            temperature=0.2,
+            max_output_tokens=800
         )
-        result = ""
-        for item in response.output:
-            if item.type == "message":
-                for c in item.content:
-                    if c.type == "output_text":
-                        result += c.text
-        return result.strip()
-    except Exception:
-        return ""
+
+        return response.output_text.strip()
+
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        return "Ошибка генерации ответа"
+
 
 # =====================================================
-# 🧠 ГЕНЕРАЦИЯ ОТВЕТА
-# =====================================================
-def generate_answer(question: str, site_text: str, history: List) -> str:
-    messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        SystemMessage(content=f"📄 ДАННЫЕ С САЙТА newkey.ru:\n{site_text[:10000]}")  # больше контекста
-    ]
-    messages.extend(history[-6:])
-    messages.append(HumanMessage(content=question))
-
-    response = llm.invoke(messages)
-    return response.content
-
-# =====================================================
-# 💬 ИСТОРИЯ
+# 💬 MEMORY
 # =====================================================
 chat_histories: Dict[str, List] = {}
 MAX_HISTORY = 6
 
+
 # =====================================================
-# 🚀 УНИВЕРСАЛЬНАЯ ЛОГИКА
+# 🚀 MAIN LOGIC
 # =====================================================
 def ask_assistant(user_id: str, question: str) -> str:
     history = chat_histories.get(user_id, [])
 
-    site_text = search_site(question)
-
-    if site_text and len(site_text) > 50:
-        answer = generate_answer(question, site_text, history)
-    else:
-        answer = "Не удалось найти информацию на сайте newkey.ru"
+    answer = generate_answer(question, history)
 
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
@@ -105,16 +120,17 @@ def ask_assistant(user_id: str, question: str) -> str:
 
     return answer
 
+
 # =====================================================
 # 🖥️ CLI
 # =====================================================
 if __name__ == "__main__":
-    print("🤖 Универсальный бот Newkey готов")
-
+    print("🤖 Бот Newkey запущен")
     user_id = "test_user"
 
     while True:
         q = input("\n❓ ")
         if q.lower() in ("exit", "quit"):
             break
+
         print("\n🤖", ask_assistant(user_id, q))
