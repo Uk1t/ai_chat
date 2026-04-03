@@ -11,13 +11,14 @@ load_dotenv()
 # =====================================================
 SYSTEM_PROMPT = """
 Ты — менеджер по продажам трубопроводной арматуры компании Newkey.
+ВАЖНО:"Ты работаешь ТОЛЬКО с переданными данными с сайта newkey.ru!
+Любая информация вне этих данных запрещена."
 
-Ты работаешь ТОЛЬКО с переданными данными с сайта newkey.ru.
-Любая информация вне этих данных запрещена.
 
 ВАЖНО:
 Если пользователь указывает артикул (например NK-BML8/6),
-обязательно выполни поиск и найди точную страницу товара на сайте newkey.ru.
+обязательно выполни поиск и найди точную страницу товара на сайте www.newkey.ru.
+Возвращай форматированный текст в формате HTML!
 
 
 Строго:
@@ -41,7 +42,7 @@ SYSTEM_PROMPT = """
 # =====================================================
 YANDEX_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_CLOUD_FOLDER_ID")
-YANDEX_MODEL = "yandexgpt"
+YANDEX_MODEL = "qwen3.5-35b-a3b-fp8"
 
 if not YANDEX_API_KEY:
     raise ValueError("YANDEX_CLOUD_API_KEY не найден")
@@ -73,7 +74,7 @@ def generate_answer(question: str, history: List) -> str:
 {history_text}
 
 Вопрос:
-{question}
+Подумай и ответь: {question} на сайте newkey.ru!
 """
 
     try:
@@ -83,9 +84,9 @@ def generate_answer(question: str, history: List) -> str:
             tools=[
                 {
                     "type": "web_search",
-                    # "filters": {
-                    #     "allowed_domains": ["newkey.ru"]
-                    # }
+                    "filters": {
+                        "allowed_domains": ["newkey.ru"]
+                    }
                 }
             ],
             temperature=0.2,
