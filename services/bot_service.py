@@ -10,7 +10,7 @@ load_dotenv()
 # =====================================================
 # 🪵 LOGGING
 # =====================================================
-LOG_FILE = "bot.log"
+LOG_FILE = os.path.join(os.path.dirname(__file__), "bot.log")
 
 logging.basicConfig(
     level=logging.INFO,
