@@ -13,7 +13,7 @@ def widget_js():
     return Response(
         content="""
 (function() {
-    const BASE_URL = "http://72.56.23.114"; // твой сервер
+    const BASE_URL = "http://72.56.23.114"; 
 
     // Создаем iframe
     const iframe = document.createElement('iframe');

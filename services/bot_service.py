@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Dict, List
 from dotenv import load_dotenv
 import openai
@@ -7,19 +8,33 @@ from langchain_core.messages import HumanMessage, AIMessage
 load_dotenv()
 
 # =====================================================
+# 🪵 LOGGING
+# =====================================================
+LOG_FILE = "bot.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+# =====================================================
 # 🧠 SYSTEM PROMPT
 # =====================================================
 SYSTEM_PROMPT = """
 Ты — менеджер по продажам трубопроводной арматуры компании Newkey.
-ВАЖНО:"Ты работаешь ТОЛЬКО с переданными данными с сайта newkey.ru!
-Любая информация вне этих данных запрещена."
 
+ВАЖНО:"Ты работаешь ТОЛЬКО с переданными данными с сайта newkey.ru! Любая информация вне этих данных запрещена."
 
 ВАЖНО:
-Если пользователь указывает артикул (например NK-BML8/6),
-обязательно выполни поиск и найди точную страницу товара на сайте www.newkey.ru.
-Возвращай форматированный текст в формате HTML!
+Если пользователь указывает артикул (например NK-BML8/6), обязательно выполни поиск и найди точную страницу товара на сайте www.newkey.ru.
 
+Возвращай форматированный текст в формате HTML!
 
 Строго:
 - Не придумывать товары, цены, наличие, артикулы.
@@ -28,8 +43,8 @@ SYSTEM_PROMPT = """
 - Если нет данных — не указывать эти характеристики.
 - Если нет цены, то указывать "цена по согласованию с менеджером"
 - Кратко, как менеджер.
-- Формат ответа:
 
+Формат ответа:
 Название товара: ...
 Характеристики: ...
 Цена: ...
@@ -46,6 +61,7 @@ YANDEX_MODEL = "qwen3.5-35b-a3b-fp8"
 
 if not YANDEX_API_KEY:
     raise ValueError("YANDEX_CLOUD_API_KEY не найден")
+
 if not YANDEX_FOLDER_ID:
     raise ValueError("YANDEX_CLOUD_FOLDER_ID не найден")
 
@@ -54,12 +70,12 @@ client = openai.OpenAI(
     base_url="https://ai.api.cloud.yandex.net/v1"
 )
 
-
-
 # =====================================================
 # 🧠 GENERATE ANSWER
 # =====================================================
 def generate_answer(question: str, history: List) -> str:
+    logger.info(f"📩 Вопрос: {question}")
+
     history_text = ""
     for msg in history[-6:]:
         if isinstance(msg, HumanMessage):
@@ -93,19 +109,21 @@ def generate_answer(question: str, history: List) -> str:
             max_output_tokens=800
         )
 
-        return response.output_text.strip()
+        answer = response.output_text.strip()
+
+        logger.info(f"📤 Ответ: {answer}")
+
+        return answer
 
     except Exception as e:
-        print(f"Ошибка: {e}")
+        logger.error(f"❌ Ошибка: {e}", exc_info=True)
         return "Ошибка генерации ответа"
-
 
 # =====================================================
 # 💬 MEMORY
 # =====================================================
 chat_histories: Dict[str, List] = {}
 MAX_HISTORY = 6
-
 
 # =====================================================
 # 🚀 MAIN LOGIC
@@ -117,20 +135,22 @@ def ask_assistant(user_id: str, question: str) -> str:
 
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
+
     chat_histories[user_id] = history[-MAX_HISTORY * 2:]
 
     return answer
-
 
 # =====================================================
 # 🖥️ CLI
 # =====================================================
 if __name__ == "__main__":
     print("🤖 Бот Newkey запущен")
+
     user_id = "test_user"
 
     while True:
         q = input("\n❓ ")
+
         if q.lower() in ("exit", "quit"):
             break
 
