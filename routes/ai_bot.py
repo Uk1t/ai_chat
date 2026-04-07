@@ -13,7 +13,7 @@ def widget_js():
     return Response(
         content="""
 (function() {
-    const BASE_URL = "http://72.56.23.114"; 
+    const BASE_URL = "https://bot.newkey.ru"; 
 
     // Создаем iframe
     const iframe = document.createElement('iframe');
@@ -45,7 +45,7 @@ def widget_js():
         toggleButton.style.alignItems = 'center';
         toggleButton.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
         toggleButton.style.margin = '5px';
-        toggleButton.innerHTML = '<img src="http://72.56.23.114/static/icons/ai.png" alt="logo_ai" width="30px" style="filter: brightness(0) invert(1);">';
+        toggleButton.innerHTML = '<img src="http://bot.newkey.ru/static/icons/ai.png" alt="logo_ai" width="30px" style="filter: brightness(0) invert(1);">';
 
         // Переключение iframe
         toggleButton.addEventListener('click', () => {

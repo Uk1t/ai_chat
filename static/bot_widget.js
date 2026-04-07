@@ -1,5 +1,5 @@
 (function () {
-    const BASE_URL = "http://72.56.23.114";
+    const BASE_URL = "https://bot.newkey.ru";
 
     async function init() {
 
