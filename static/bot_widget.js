@@ -36,6 +36,12 @@
         function addMessage(who, text) {
             const div = document.createElement("div");
             div.innerHTML = `<b>${who}:</b><br>${text}`
+            const links = div.querySelectorAll("a");
+            links.forEach(link => {
+                link.setAttribute("target", "_blank");
+                link.setAttribute("rel", "noopener noreferrer");
+            });
+
             div.style.color = "white";
             div.style.maxWidth = '85%'
             div.style.marginLeft = who === "Вы" ? "auto" : "0"
