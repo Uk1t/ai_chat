@@ -155,7 +155,7 @@
 
         closeBtn.addEventListener("click", () => {
             window.parent.postMessage({action: "close-ai-widget"}, "*");
-            let btn_b24_clode = document.querySelector('.b24-widget-button-close')
+            let btn_b24_clode = window.parent.document.querySelector('.b24-widget-button-close');
             if (btn_b24_clode) {
                 console.log('close')
                 btn_b24_clode.click()
