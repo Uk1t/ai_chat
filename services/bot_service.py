@@ -57,7 +57,7 @@ SYSTEM_PROMPT = """
 # =====================================================
 YANDEX_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_CLOUD_FOLDER_ID")
-YANDEX_MODEL = "qwen3.5-35b-a3b-fp8"
+YANDEX_MODEL = "qwen3-235b-a22b-fp8"
 
 if not YANDEX_API_KEY:
     raise ValueError("YANDEX_CLOUD_API_KEY не найден")
